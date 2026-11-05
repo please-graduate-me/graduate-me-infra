@@ -1,0 +1,28 @@
+name: 홈서버 배포
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 배포할 환경
+        required: true
+        type: choice
+        options: [development, production, shared]
+permissions:
+  contents: read
+concurrency:
+  group: graduate-me-home-deployment
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, graduate-me-deploy]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 지정한 환경 배포
+        env:
+          DEPLOY_TARGET: ${{ inputs.target }}
+          GRADUATE_ME_ENV_DIR: ${{ vars.GRADUATE_ME_ENV_DIR }}
+          GRADUATE_ME_BACKUP_DIR: ${{ vars.GRADUATE_ME_BACKUP_DIR }}
+        run: bash scripts/deploy.sh "$DEPLOY_TARGET"

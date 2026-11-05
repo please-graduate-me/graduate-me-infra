@@ -1,0 +1,112 @@
+---
+services:
+  api:
+    build:
+      context: '../graduate-me-backend'
+      dockerfile: Dockerfile.dev
+    command: sh -c "pnpm db:migrate && pnpm db:seed && pnpm dev:app"
+    develop:
+      watch:
+        - action: sync+restart
+          path: '../graduate-me-backend/'
+          target: '/app'
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - '.next/'
+            - '.git/'
+            - '.env'
+            - '.env.*'
+            - '.agents/'
+            - '*.tsbuildinfo'
+            - package.json
+            - pnpm-lock.yaml
+            - Dockerfile*
+            - compose*.yaml
+        - action: rebuild
+          path: '../graduate-me-backend/pnpm-lock.yaml'
+        - action: rebuild
+          path: '../graduate-me-backend/package.json'
+        - action: rebuild
+          path: '../graduate-me-backend/Dockerfile.dev'
+  worker:
+    build:
+      context: '../graduate-me-backend'
+      dockerfile: Dockerfile.dev
+    command: pnpm dev:worker
+    develop:
+      watch:
+        - action: sync+restart
+          path: '../graduate-me-backend/'
+          target: '/app'
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - '.next/'
+            - '.git/'
+            - '.env'
+            - '.env.*'
+            - '.agents/'
+            - '*.tsbuildinfo'
+            - package.json
+            - pnpm-lock.yaml
+            - Dockerfile*
+            - compose*.yaml
+        - action: rebuild
+          path: '../graduate-me-backend/pnpm-lock.yaml'
+        - action: rebuild
+          path: '../graduate-me-backend/package.json'
+        - action: rebuild
+          path: '../graduate-me-backend/Dockerfile.dev'
+  web:
+    build:
+      context: '../graduate-me-frontend'
+      dockerfile: Dockerfile.dev
+    command: pnpm dev:app
+    develop:
+      watch:
+        - action: sync
+          path: '../graduate-me-frontend/'
+          target: '/app'
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - '.next/'
+            - '.git/'
+            - '.env'
+            - '.env.*'
+            - '.agents/'
+            - '*.tsbuildinfo'
+            - package.json
+            - pnpm-lock.yaml
+            - Dockerfile*
+            - compose*.yaml
+        - action: rebuild
+          path: '../graduate-me-frontend/pnpm-lock.yaml'
+        - action: rebuild
+          path: '../graduate-me-frontend/package.json'
+        - action: rebuild
+          path: '../graduate-me-frontend/Dockerfile.dev'
+  processor:
+    develop:
+      watch:
+        - action: sync+restart
+          path: '../audio-processor/'
+          target: '/app'
+          initial_sync: true
+          ignore:
+            - '.git/'
+            - '.env'
+            - '.env.*'
+            - __pycache__/
+            - '.venv/'
+            - models/
+            - requirements.txt
+            - cookies*
+        - action: rebuild
+          path: '../audio-processor/requirements.txt'
+        - action: rebuild
+          path: '../audio-processor/Dockerfile'

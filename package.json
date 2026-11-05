@@ -1,0 +1,23 @@
+{
+  "name": "graduate-me-infra",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "docker compose -f compose.yaml -f compose.local.yaml up --build --watch",
+    "dev:up": "docker compose -f compose.yaml -f compose.local.yaml up --build -d --wait",
+    "dev:down": "docker compose -f compose.yaml -f compose.local.yaml down",
+    "dev:logs": "docker compose logs --follow --tail=50",
+    "format": "prettier . --write",
+    "lint": "eslint . --max-warnings=0",
+    "check": "pnpm format && pnpm lint && node scripts/check.mjs",
+    "check:ci": "prettier . --check && pnpm lint && node scripts/check.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "globals": "17.14.0",
+    "prettier": "3.9.10"
+  }
+}

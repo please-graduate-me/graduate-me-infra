@@ -1,0 +1,13 @@
+{$PRODUCTION_DOMAIN} {
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy production-api:4000
+	}
+	handle {
+		reverse_proxy production-web:3000
+	}
+}
+
+{$DEVELOPMENT_API_DOMAIN} {
+	reverse_proxy development-api:4000
+}
