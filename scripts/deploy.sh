@@ -7,6 +7,20 @@ case "$stage" in
   *) echo '사용법: bash scripts/deploy.sh development|production|shared' >&2; exit 1 ;;
 esac
 
+demo=0
+local_images=0
+for option in "${@:2}"; do
+  case "$option" in
+    --demo) demo=1 ;;
+    --local-images) local_images=1 ;;
+    *) echo "지원하지 않는 옵션: $option" >&2; exit 1 ;;
+  esac
+done
+if [[ "$demo" == 1 && "$stage" == development ]]; then
+  echo '체험 배포는 shared와 production에만 사용합니다.' >&2
+  exit 1
+fi
+
 infra_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$infra_root"
 : "${GRADUATE_ME_ENV_DIR:?홈서버의 비밀 설정 디렉터리를 지정하세요}"
@@ -24,10 +38,14 @@ fi
 # 설정 파일을 실행하지 않고 Compose의 환경변수 파서로만 읽는다.
 compose=(docker compose --env-file "$image_file" --env-file "$secret_file" -f "compose.$stage.yaml")
 "${compose[@]}" config --quiet
-"${compose[@]}" pull
+if [[ "$local_images" == 0 ]]; then
+  "${compose[@]}" pull
+fi
 
 if [[ "$stage" != shared ]]; then
-  docker network inspect "graduate-me-$stage-edge" "graduate-me-$stage-processing" >/dev/null
+  networks=("graduate-me-$stage-edge")
+  if [[ "$demo" == 0 ]]; then networks+=("graduate-me-$stage-processing"); fi
+  docker network inspect "${networks[@]}" >/dev/null
   "${compose[@]}" up -d --wait db
   services=(worker api)
   if [[ "$stage" == production ]]; then services+=(web); fi
@@ -41,7 +59,15 @@ if [[ "$stage" != shared ]]; then
   "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_file"
   test -s "$backup_file"
   "${compose[@]}" run --rm --no-deps api sh -c 'pnpm db:migrate && pnpm db:seed'
+  if [[ "$demo" == 1 ]]; then
+    test -s "$GRADUATE_ME_ENV_DIR/demo.json"
+    "${compose[@]}" run --rm --no-deps -T api pnpm exec tsx src/database/seed-demo.ts < "$GRADUATE_ME_ENV_DIR/demo.json"
+  fi
 fi
 
-"${compose[@]}" up -d --wait --wait-timeout 180
+services=()
+if [[ "$demo" == 1 ]]; then
+  if [[ "$stage" == shared ]]; then services=(gateway); else services=(api web); fi
+fi
+"${compose[@]}" up -d --wait --wait-timeout 180 "${services[@]}"
 "${compose[@]}" ps

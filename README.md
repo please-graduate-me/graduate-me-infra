@@ -89,6 +89,19 @@ bash scripts/deploy.sh production
 
 백업 위치는 `GRADUATE_ME_BACKUP_DIR`로 지정하며 기본값은 비밀 설정 디렉터리의 `backups`입니다. 정기 백업, 별도 장치로의 복사, 보존 기간과 복원 검증은 실제 운영 전 추가해야 합니다. 이미지 버전을 되돌려도 DB 마이그레이션은 자동으로 되돌아가지 않습니다.
 
+## 운영 데모만 배포
+
+로그인과 신규 영상 처리를 사용하지 않을 때는 Caddy, 운영 프론트, 운영 API와 운영 DB만 실행합니다. 개발 환경, worker와 audio-processor는 시작하지 않습니다. 운영 환경변수의 Google OAuth 항목은 비워 둡니다. 최초 데모 자료는 준비된 공개 `/api/demo` 응답을 비밀 설정 디렉터리의 `demo.json`에 저장합니다. 사용자 답안이나 계정 DB는 복제하지 않습니다.
+
+외부 빌드 장비에서 검증한 `linux/amd64` 이미지를 `docker save`와 `docker load`로 서버에 전달한 경우, 이미지 파일에 전달된 이미지의 digest를 기록하고 다음처럼 실행합니다.
+
+```sh
+bash scripts/deploy.sh shared --demo --local-images
+bash scripts/deploy.sh production --demo --local-images
+```
+
+`--local-images`는 레지스트리 다운로드만 생략합니다. DB 백업과 마이그레이션, seed와 상태 확인은 그대로 수행합니다. 최초 체험 자료 가져오기는 기존 구절이 있으면 교체하지 않습니다. 로그인과 신규 처리를 공개하기 전에는 OAuth, 처리기 키와 공용 처리기 배포를 별도로 완료해야 합니다.
+
 ## 팀원의 로컬 프론트와 개발 API
 
 팀원은 홈서버 SSH나 DB 접속 권한 없이 개발 API의 HTTPS 주소를 사용합니다. 서버 API 주소를 프론트의 `API_INTERNAL_URL`에 주입하는 별도 프론트 개발용 Compose 구성이 필요합니다. 현재 앱 저장소의 기본 Compose는 로컬 API 주소로 고정되어 있습니다.
