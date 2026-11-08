@@ -67,9 +67,9 @@ pnpm dev:down
 
 ## 홈서버 설정과 최초 배포
 
-현재 홈서버 주소, 도메인, 실제 이미지와 runner는 설정되지 않았습니다. `configure-me` 이미지 값이 남아 있으면 배포 스크립트가 중단됩니다. 이 저장소를 만드는 것만으로 운영 서비스가 배포되지는 않습니다.
+홈서버 SSH 주소는 `jaejoon-server`, 운영 도메인은 `pleasegraduate.me`, 개발 API 도메인은 `dev-api.pleasegraduate.me`입니다. 실제 이미지 버전과 배포 runner는 별도로 준비해야 합니다. `configure-me` 이미지 값이 남아 있으면 배포 스크립트가 중단됩니다. 이 저장소를 만드는 것만으로 운영 서비스가 배포되지는 않습니다.
 
-1. 실제 도메인 두 개와 홈서버까지 연결되는 HTTPS 진입 경로를 준비합니다. 기본 Caddy 구성은 80/443 연결이 가능해야 합니다. 포트 포워딩이 불가능한 네트워크라면 터널 방식으로 구성을 변경해야 합니다.
+1. Cloudflare에서 도메인을 활성화하고 `graduate-me` Tunnel을 생성합니다. 홈서버에 Linux amd64용 cloudflared를 서비스로 설치합니다. Published application route에서 `pleasegraduate.me`와 `dev-api.pleasegraduate.me`를 각각 `http://127.0.0.1:8080`에 연결합니다. Caddy의 호스트별 분기를 위해 HTTP Host Header를 별도 주소로 덮어쓰지 않습니다. Tunnel이 DNS 레코드를 만들므로 홈서버 공인 IP를 가리키는 A 레코드는 필요하지 않습니다. 토큰은 서버에서만 사용하고 Git에 넣지 않습니다.
 2. 홈서버에 저장소 밖의 비밀 설정 디렉터리를 만들고 접근 권한을 제한합니다. `env/shared.env.example`, `env/development.env.example`, `env/production.env.example`을 각각 `shared.env`, `development.env`, `production.env`로 복사해 채웁니다.
 3. DB 비밀번호와 AUTH_SECRET은 환경별로 `openssl rand -hex 32`로 생성합니다. DB 비밀번호는 연결 URL에서 사용하므로 이 형식을 유지합니다. OAuth 클라이언트도 환경별로 나눕니다. 초기화 후 DB 비밀번호 변경은 PostgreSQL 계정 변경 절차가 별도로 필요합니다.
 4. GitHub 이미지 빌드에서 생성한 실제 커밋 태그나 digest를 `images/*.env`에 기록하고 커밋합니다. 백엔드 이미지 하나를 API와 worker가 서로 다른 시작 명령으로 사용합니다.
@@ -83,7 +83,7 @@ bash scripts/deploy.sh development
 bash scripts/deploy.sh production
 ```
 
-비밀 설정 파일에는 해당 예시의 키만 넣습니다. 이미지 버전은 `images/*.env`에서 관리합니다. 운영 `AUTH_URL`은 `https://운영도메인`과 일치해야 합니다. 운영 프론트는 내부 운영 API만 사용합니다.
+비밀 설정 파일에는 해당 예시의 키만 넣습니다. 이미지 버전은 `images/*.env`에서 관리합니다. 운영 `AUTH_URL`은 `https://pleasegraduate.me`로 설정합니다. Google OAuth 리디렉션 URI는 `https://pleasegraduate.me/api/auth/callback/google`로 등록합니다. 운영 프론트는 내부 운영 API만 사용합니다.
 
 배포 스크립트는 이미지 다운로드, DB 기동, API·worker 및 운영 웹 중단, DB 백업, 마이그레이션·seed, 서비스 시작과 상태 확인을 순서대로 수행합니다. 짧은 중단 시간이 있으며 무중단 배포를 제공하지 않습니다. 마이그레이션에 실패하면 앱은 중단된 상태로 남겨 원인을 확인하게 합니다. 운영에서 `down -v`를 실행하지 않습니다.
 
