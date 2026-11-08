@@ -1,6 +1,6 @@
 # graduate-me-infra
 
-프론트엔드, 백엔드, 음성 처리기를 함께 실행하고 홈서버의 개발·운영 환경을 관리하는 저장소입니다. 앱 소스와 Dockerfile은 각 앱 저장소에 유지합니다. 실제 비밀값과 DB 데이터는 Git에 저장하지 않습니다.
+프론트엔드와 백엔드를 함께 실행하고 홈서버의 개발·운영 환경을 관리하는 저장소입니다. 앱 소스와 Dockerfile은 각 앱 저장소에 유지합니다. 실제 비밀값과 DB 데이터는 Git에 저장하지 않습니다.
 
 ## 파일과 책임
 
@@ -9,7 +9,7 @@
 | `compose.yaml` + `compose.local.yaml` | 개발자 PC에서 모든 서비스를 함께 실행하고 소스 변경 반영 |
 | `compose.development.yaml` | 홈서버의 개발 API, worker, 개발 PostgreSQL |
 | `compose.production.yaml` | 홈서버의 운영 프론트, API, worker, 운영 PostgreSQL |
-| `compose.shared.yaml` | 공용 Caddy와 audio-processor, 환경 간 연결 네트워크 |
+| `compose.shared.yaml` | 공용 Caddy와 환경별 진입 네트워크 |
 | `Caddyfile` | Tunnel 내부 HTTP 요청을 운영 웹과 개발 API로 전달 |
 | `images/*.env` | 실제 배포할 이미지 버전 기록, 비밀값 없음 |
 | `env/*.env.example` | 환경별 비밀 설정의 빈 양식 |
@@ -24,8 +24,7 @@
 codding/
 ├── graduate-me-infra/
 ├── graduate-me-frontend/
-├── graduate-me-backend/
-└── audio-processor/
+└── graduate-me-backend/
 ```
 
 Node.js 22, pnpm 10.33.0, Docker Compose가 필요합니다. 기존 저장소의 코드를 직접 참조하는 곳은 Docker 빌드 컨텍스트와 소스 감시뿐입니다.
@@ -33,11 +32,11 @@ Node.js 22, pnpm 10.33.0, Docker Compose가 필요합니다. 기존 저장소의
 ```sh
 pnpm install --frozen-lockfile
 test -f .env || cp .env.example .env
-# .env에 인증 정보, 음성 API 키와 32자 이상의 PROCESSOR_API_TOKEN을 설정합니다.
+# .env에 인증 정보, GEMINI_API_KEY와 YOUTUBE_API_KEY을 설정합니다.
 pnpm dev
 ```
 
-`pnpm dev` 한 번으로 웹, API, DB, worker, 음성 처리기를 실행하고 코드 변경을 반영합니다. 백그라운드 실행만 필요하면 `pnpm dev:up`을 사용합니다. 이 명령은 파일 감시를 켜지 않으므로 필요한 경우 아래 명령을 별도 터미널에서 실행합니다.
+`pnpm dev` 한 번으로 웹, API, DB, worker를 실행하고 코드 변경을 반영합니다. 백그라운드 실행만 필요하면 `pnpm dev:up`을 사용합니다. 이 명령은 파일 감시를 켜지 않으므로 필요한 경우 아래 명령을 별도 터미널에서 실행합니다.
 
 ```sh
 docker compose -f compose.yaml -f compose.local.yaml watch --no-up
@@ -45,7 +44,7 @@ pnpm dev:logs
 pnpm dev:down
 ```
 
-웹은 `http://localhost:3000`, API는 `http://localhost:4000`, 처리기 상태는 `http://localhost:8000/health`입니다. DB 포트는 로컬의 `15432`입니다. 이 포트들은 모두 `127.0.0.1`에만 연결합니다.
+웹은 `http://localhost:3000`, API는 `http://localhost:4000`입니다. DB 포트는 로컬의 `15432`입니다. 이 포트들은 모두 `127.0.0.1`에만 연결합니다.
 
 기존 개별 Compose에서 전환할 때는 해당 파일 감시와 컨테이너를 먼저 종료합니다. 각 앱 폴더의 `docker compose -f compose.yaml -f compose.dev.yaml down`, 처리기의 `docker compose down`을 사용합니다. 볼륨 삭제 옵션은 사용하지 않습니다.
 
@@ -57,13 +56,13 @@ pnpm dev:down
 
 - 운영: 프론트 1개, API 1개, worker 1개, PostgreSQL 1개
 - 개발: API 1개, worker 1개, PostgreSQL 1개
-- 공용: Caddy 1개, 음성 처리기 1개
+- 공용: Caddy 1개
 
-개발과 운영의 DB 컨테이너, 볼륨, 내부 네트워크를 분리했습니다. DB와 처리기에는 호스트 공개 포트가 없습니다. Caddy는 호스트의 `127.0.0.1:8080`에만 연결합니다. 홈서버의 cloudflared 서비스가 이 주소로 요청을 전달하며 공유기 포트 포워딩은 사용하지 않습니다. 공개 HTTPS는 Cloudflare에서 처리하고 Tunnel 뒤 Caddy는 HTTP로 실행합니다. 인증 콜백과 보안 쿠키가 HTTPS를 기준으로 동작하도록 Caddy가 업스트림에 `X-Forwarded-Proto: https`를 전달합니다. DB 내부 네트워크는 외부 연결을 차단하고, API와 worker는 각각 필요한 네트워크에 추가로 연결합니다.
+개발과 운영의 DB 컨테이너, 볼륨, 내부 네트워크를 분리했습니다. DB에는 호스트 공개 포트가 없습니다. Caddy는 호스트의 `127.0.0.1:8080`에만 연결합니다. 홈서버의 cloudflared 서비스가 이 주소로 요청을 전달하며 공유기 포트 포워딩은 사용하지 않습니다. 공개 HTTPS는 Cloudflare에서 처리하고 Tunnel 뒤 Caddy는 HTTP로 실행합니다. 인증 콜백과 보안 쿠키가 HTTPS를 기준으로 동작하도록 Caddy가 업스트림에 `X-Forwarded-Proto: https`를 전달합니다. DB 내부 네트워크는 외부 연결을 차단하고, API와 worker는 각각 필요한 네트워크에 추가로 연결합니다.
 
-공용 처리기는 개발·운영의 처리기 연결용 네트워크에 각각 참여합니다. 두 환경의 토큰을 처리기와 같게 설정해야 하며 동시 처리 수는 기본 1입니다. 개발 작업도 운영과 동일한 처리 슬롯과 외부 API 사용량을 소비합니다. 처리기 업데이트는 양쪽에 영향을 주므로 검증한 버전만 올립니다. 이 구성은 단일 물리 서버 장애를 분리하지 않습니다.
+worker는 각 환경의 외부 통신용 `egress` 네트워크에서 YouTube Data API와 Gemini API를 직접 호출합니다. `GEMINI_API_KEY`, `YOUTUBE_API_KEY`, `GEMINI_MODEL`은 로컬 `.env` 또는 환경별 `development.env`, `production.env`에 설정합니다. 모델 기본값은 `gemini-3.8-flash`이며 YouTube Data API v3 활성화가 필요합니다. 개발과 운영은 별도 키·쿼터를 사용하는 것을 권장합니다. API·웹·공용 gateway에는 분석 키를 주입하지 않습니다. 이 구성은 단일 물리 서버 장애를 분리하지 않습니다.
 
-초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 1GiB, 처리기 3GiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
+초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 1GiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
 
 ## 홈서버 설정과 최초 배포
 
@@ -91,7 +90,7 @@ bash scripts/deploy.sh production
 
 ## 운영 데모만 배포
 
-로그인과 신규 영상 처리를 사용하지 않을 때는 Caddy, 운영 프론트, 운영 API와 운영 DB만 실행합니다. 개발 환경, worker와 audio-processor는 시작하지 않습니다. 운영 환경변수의 Google OAuth 항목은 비워 둡니다. 최초 데모 자료는 준비된 공개 `/api/demo` 응답을 비밀 설정 디렉터리의 `demo.json`에 저장합니다. 사용자 답안이나 계정 DB는 복제하지 않습니다.
+로그인과 신규 영상 처리를 사용하지 않을 때는 Caddy, 운영 프론트, 운영 API와 운영 DB만 실행합니다. 개발 환경, worker는 시작하지 않습니다. 운영 환경변수의 Google OAuth 항목은 비워 둡니다. 최초 데모 자료는 준비된 공개 `/api/demo` 응답을 비밀 설정 디렉터리의 `demo.json`에 저장합니다. 사용자 답안이나 계정 DB는 복제하지 않습니다.
 
 외부 빌드 장비에서 검증한 `linux/amd64` 이미지를 `docker save`와 `docker load`로 서버에 전달한 경우, 이미지 파일에 전달된 이미지의 digest를 기록하고 다음처럼 실행합니다.
 
@@ -100,7 +99,7 @@ bash scripts/deploy.sh shared --demo --local-images
 bash scripts/deploy.sh production --demo --local-images
 ```
 
-`--local-images`는 레지스트리 다운로드만 생략합니다. DB 백업과 마이그레이션, seed와 상태 확인은 그대로 수행합니다. 최초 체험 자료 가져오기는 기존 구절이 있으면 교체하지 않습니다. 로그인과 신규 처리를 공개하기 전에는 OAuth, 처리기 키와 공용 처리기 배포를 별도로 완료해야 합니다.
+`--local-images`는 레지스트리 다운로드만 생략합니다. DB 백업과 마이그레이션, seed와 상태 확인은 그대로 수행합니다. 최초 체험 자료 가져오기는 기존 구절이 있으면 교체하지 않습니다. 로그인과 신규 처리를 공개하기 전에는 OAuth와 환경별 Gemini·YouTube 키 설정을 완료해야 합니다.
 
 ## 팀원의 로컬 프론트와 개발 API
 

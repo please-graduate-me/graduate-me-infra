@@ -51,12 +51,11 @@ services:
     init: true
     environment:
       DATABASE_URL: postgresql://graduate_me:graduate_me_local@db:5432/graduate_me
-      PROCESSOR_URL: http://processor:8000
-      PROCESSOR_API_TOKEN: '${PROCESSOR_API_TOKEN:?PROCESSOR_API_TOKEN을 설정하세요}'
+      GEMINI_API_KEY: '${GEMINI_API_KEY:-}'
+      GEMINI_MODEL: '${GEMINI_MODEL:-gemini-3.8-flash}'
+      YOUTUBE_API_KEY: '${YOUTUBE_API_KEY:-}'
     depends_on:
       api:
-        condition: service_healthy
-      processor:
         condition: service_healthy
     restart: unless-stopped
   web:
@@ -81,31 +80,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-  processor:
-    build:
-      context: '../audio-processor'
-    init: true
-    environment:
-      GROQ_API_KEY: '${GROQ_API_KEY:-}'
-      QRUQ_WHISPER: '${QRUQ_WHISPER:-}'
-      YOUTUBE_API_KEY: '${YOUTUBE_API_KEY:-}'
-      YOUTUBE_DATA_API_v3: '${YOUTUBE_DATA_API_v3:-}'
-      YTDLP_COOKIES_FILE: '${YTDLP_COOKIES_FILE:-}'
-      YTDLP_EXTRACTOR_ARGS: '${YTDLP_EXTRACTOR_ARGS:-}'
-      PROCESSOR_API_TOKEN: '${PROCESSOR_API_TOKEN:?PROCESSOR_API_TOKEN을 설정하세요}'
-      PROCESSOR_CONCURRENCY: '${PROCESSOR_CONCURRENCY:-1}'
-    ports:
-      - 127.0.0.1:8000:8000
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - '-c'
-        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
 volumes:
   postgres_data:
     name: '${LOCAL_POSTGRES_VOLUME:-graduate-me-local_postgres_data}'

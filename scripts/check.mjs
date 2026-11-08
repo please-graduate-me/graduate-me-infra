@@ -10,12 +10,13 @@ const env = {
   AUTH_SECRET: 'validation_only_secret_0123456789',
   AUTH_GOOGLE_ID: 'validation_only_id',
   AUTH_GOOGLE_SECRET: 'validation_only_oauth_secret',
-  PROCESSOR_API_TOKEN: 'validation_only_token_01234567890123456789',
+  GEMINI_API_KEY: 'validation_only_gemini_key',
+  YOUTUBE_API_KEY: 'validation_only_youtube_key',
+  GEMINI_MODEL: 'gemini-3.8-flash',
   PRODUCTION_DOMAIN: 'app.example.test',
   DEVELOPMENT_API_DOMAIN: 'dev-api.example.test',
   API_IMAGE: 'example/api:validation',
   WEB_IMAGE: 'example/web:validation',
-  PROCESSOR_IMAGE: 'example/processor:validation',
 };
 
 function config(files) {
@@ -38,18 +39,16 @@ const local = config(['compose.yaml', 'compose.local.yaml']);
 assert.deepEqual(Object.keys(local.services).sort(), [
   'api',
   'db',
-  'processor',
   'web',
   'worker',
 ]);
+assert.equal(local.services.worker.depends_on.processor, undefined);
 assert.equal(
-  local.services.worker.environment.PROCESSOR_URL,
-  'http://processor:8000'
+  local.services.worker.environment.GEMINI_API_KEY,
+  env.GEMINI_API_KEY
 );
-assert.equal(
-  local.services.worker.depends_on.processor.condition,
-  'service_healthy'
-);
+assert.equal(local.services.api.environment.GEMINI_API_KEY, undefined);
+assert.equal(local.services.web.environment.GEMINI_API_KEY, undefined);
 
 const stages = ['development', 'production'];
 const deployments = stages.map((stage) => config([`compose.${stage}.yaml`]));
@@ -91,15 +90,30 @@ const caddyfile = readFileSync('Caddyfile', 'utf8');
 assert.ok(caddyfile.includes('http://{$PRODUCTION_DOMAIN}'));
 assert.ok(caddyfile.includes('http://{$DEVELOPMENT_API_DOMAIN}'));
 assert.equal(caddyfile.match(/header_up X-Forwarded-Proto https/g)?.length, 3);
-assert.equal(shared.services.processor.ports, undefined);
-assert.equal(shared.services.processor.environment.PROCESSOR_CONCURRENCY, '1');
-for (const stage of stages) {
-  for (const network of ['edge', 'processing']) {
-    assert.equal(
-      shared.networks[`${stage}-${network}`].name,
-      `graduate-me-${stage}-${network}`
-    );
-  }
+assert.deepEqual(Object.keys(shared.services), ['gateway']);
+for (const [index, app] of deployments.entries()) {
+  const stage = stages[index];
+
+  assert.equal(app.services.processor, undefined);
+  assert.equal(app.networks.processing, undefined);
+  assert.equal(app.networks.egress.internal ?? false, false);
+  assert.deepEqual(app.services.worker.networks, {
+    database: null,
+    egress: null,
+  });
+  assert.equal(
+    app.services.worker.environment.GEMINI_API_KEY,
+    env.GEMINI_API_KEY
+  );
+  assert.equal(
+    app.services.worker.environment.YOUTUBE_API_KEY,
+    env.YOUTUBE_API_KEY
+  );
+  assert.equal(app.services.api.environment.GEMINI_API_KEY, undefined);
+  assert.equal(
+    shared.networks[`${stage}-edge`].name,
+    `graduate-me-${stage}-edge`
+  );
 }
 
 for (const file of readdirSync('scripts').filter((name) =>
@@ -119,7 +133,7 @@ for (const file of [
   const lines = readFileSync(file, 'utf8').split('\n');
   for (const line of lines) {
     if (
-      /^(DB_PASSWORD|AUTH_SECRET|AUTH_GOOGLE_SECRET|PROCESSOR_API_TOKEN|GROQ_API_KEY|YOUTUBE_API_KEY)=/.test(
+      /^(DB_PASSWORD|AUTH_SECRET|AUTH_GOOGLE_SECRET|GEMINI_API_KEY|YOUTUBE_API_KEY)=/.test(
         line
       )
     ) {

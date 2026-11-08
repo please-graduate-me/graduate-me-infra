@@ -44,7 +44,6 @@ fi
 
 if [[ "$stage" != shared ]]; then
   networks=("graduate-me-$stage-edge")
-  if [[ "$demo" == 0 ]]; then networks+=("graduate-me-$stage-processing"); fi
   docker network inspect "${networks[@]}" >/dev/null
   "${compose[@]}" up -d --wait db
   services=(worker api)
@@ -69,5 +68,5 @@ services=()
 if [[ "$demo" == 1 ]]; then
   if [[ "$stage" == shared ]]; then services=(gateway); else services=(api web); fi
 fi
-"${compose[@]}" up -d --wait --wait-timeout 180 "${services[@]}"
+"${compose[@]}" up -d --wait --remove-orphans --wait-timeout 180 "${services[@]}"
 "${compose[@]}" ps

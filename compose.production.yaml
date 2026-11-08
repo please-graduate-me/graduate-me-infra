@@ -67,11 +67,12 @@ services:
     init: true
     environment:
       DATABASE_URL: postgresql://graduate_me:${DB_PASSWORD:?DB_PASSWORD를 설정하세요}@db:5432/graduate_me_production
-      PROCESSOR_URL: http://processor:8000
-      PROCESSOR_API_TOKEN: '${PROCESSOR_API_TOKEN:?PROCESSOR_API_TOKEN을 설정하세요}'
+      GEMINI_API_KEY: '${GEMINI_API_KEY:-}'
+      GEMINI_MODEL: '${GEMINI_MODEL:-gemini-3.8-flash}'
+      YOUTUBE_API_KEY: '${YOUTUBE_API_KEY:-}'
     networks:
       - database
-      - processing
+      - egress
     depends_on:
       api:
         condition: service_healthy
@@ -123,6 +124,4 @@ networks:
   edge:
     name: graduate-me-production-edge
     external: true
-  processing:
-    name: graduate-me-production-processing
-    external: true
+  egress: {}
