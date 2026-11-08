@@ -30,7 +30,7 @@ if [[ ! -f "$secret_file" ]]; then
   echo "환경 설정 파일이 없습니다: $secret_file" >&2
   exit 1
 fi
-if grep -Eq 'configure-me|:latest([[:space:]]|$)' "$image_file"; then
+if grep -Eq '^[A-Z_]+=.*(configure-me|:latest([[:space:]]|$))' "$image_file"; then
   echo 'images 파일에 실제 검증한 이미지 버전을 먼저 기록하세요.' >&2
   exit 1
 fi
