@@ -83,6 +83,14 @@ assert.notEqual(
   deployments[1].networks.database.name
 );
 const shared = config(['compose.shared.yaml']);
+assert.equal(shared.services.gateway.ports.length, 1);
+assert.equal(shared.services.gateway.ports[0].host_ip, '127.0.0.1');
+assert.equal(shared.services.gateway.ports[0].published, '8080');
+assert.equal(shared.services.gateway.ports[0].target, 80);
+const caddyfile = readFileSync('Caddyfile', 'utf8');
+assert.ok(caddyfile.includes('http://{$PRODUCTION_DOMAIN}'));
+assert.ok(caddyfile.includes('http://{$DEVELOPMENT_API_DOMAIN}'));
+assert.equal(caddyfile.match(/header_up X-Forwarded-Proto https/g)?.length, 3);
 assert.equal(shared.services.processor.ports, undefined);
 assert.equal(shared.services.processor.environment.PROCESSOR_CONCURRENCY, '1');
 for (const stage of stages) {

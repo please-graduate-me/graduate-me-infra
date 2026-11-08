@@ -10,7 +10,7 @@
 | `compose.development.yaml` | 홈서버의 개발 API, worker, 개발 PostgreSQL |
 | `compose.production.yaml` | 홈서버의 운영 프론트, API, worker, 운영 PostgreSQL |
 | `compose.shared.yaml` | 공용 Caddy와 audio-processor, 환경 간 연결 네트워크 |
-| `Caddyfile` | 운영 웹과 개발 API의 HTTPS 진입점 |
+| `Caddyfile` | Tunnel 내부 HTTP 요청을 운영 웹과 개발 API로 전달 |
 | `images/*.env` | 실제 배포할 이미지 버전 기록, 비밀값 없음 |
 | `env/*.env.example` | 환경별 비밀 설정의 빈 양식 |
 | `.github/workflows/check.yaml` | GitHub 제공 runner에서 인프라 구성 검사 |
@@ -53,13 +53,13 @@ pnpm dev:down
 
 ## 홈서버 구성
 
-Intel 맥미니에서는 `linux/amd64` 이미지를 사용합니다. macOS를 유지하는 경우 지원되는 Docker Desktop 버전, 재부팅 후 Docker 및 runner의 시작, 절전 해제를 확인해야 합니다. GitHub의 Linux runner에서 빌드하고 홈서버는 이미지를 실행하는 역할만 맡깁니다.
+홈서버는 Ubuntu 24.04의 Intel 맥미니이며 `linux/amd64` 이미지를 사용합니다. SSH 관리는 Tailscale의 `ssh jaejoon-server`로 접속합니다. 재부팅 후 Docker와 cloudflared가 자동으로 시작되는지 확인합니다. GitHub의 Linux runner에서 빌드하고 홈서버는 이미지를 실행하는 역할만 맡깁니다.
 
 - 운영: 프론트 1개, API 1개, worker 1개, PostgreSQL 1개
 - 개발: API 1개, worker 1개, PostgreSQL 1개
 - 공용: Caddy 1개, 음성 처리기 1개
 
-개발과 운영의 DB 컨테이너, 볼륨, 내부 네트워크를 분리했습니다. DB와 처리기에는 호스트 공개 포트가 없습니다. Caddy만 80/443 포트를 공개합니다. DB 내부 네트워크는 외부 연결을 차단하고, API와 worker는 각각 필요한 네트워크에 추가로 연결합니다.
+개발과 운영의 DB 컨테이너, 볼륨, 내부 네트워크를 분리했습니다. DB와 처리기에는 호스트 공개 포트가 없습니다. Caddy는 호스트의 `127.0.0.1:8080`에만 연결합니다. 홈서버의 cloudflared 서비스가 이 주소로 요청을 전달하며 공유기 포트 포워딩은 사용하지 않습니다. 공개 HTTPS는 Cloudflare에서 처리하고 Tunnel 뒤 Caddy는 HTTP로 실행합니다. 인증 콜백과 보안 쿠키가 HTTPS를 기준으로 동작하도록 Caddy가 업스트림에 `X-Forwarded-Proto: https`를 전달합니다. DB 내부 네트워크는 외부 연결을 차단하고, API와 worker는 각각 필요한 네트워크에 추가로 연결합니다.
 
 공용 처리기는 개발·운영의 처리기 연결용 네트워크에 각각 참여합니다. 두 환경의 토큰을 처리기와 같게 설정해야 하며 동시 처리 수는 기본 1입니다. 개발 작업도 운영과 동일한 처리 슬롯과 외부 API 사용량을 소비합니다. 처리기 업데이트는 양쪽에 영향을 주므로 검증한 버전만 올립니다. 이 구성은 단일 물리 서버 장애를 분리하지 않습니다.
 

@@ -1,13 +1,20 @@
-{$PRODUCTION_DOMAIN} {
+http://{$PRODUCTION_DOMAIN} {
 	@api path /api /api/*
 	handle @api {
-		reverse_proxy production-api:4000
+		reverse_proxy production-api:4000 {
+			# 공개 HTTPS는 Cloudflare가 종료하고 Tunnel 내부는 HTTP를 사용한다.
+			header_up X-Forwarded-Proto https
+		}
 	}
 	handle {
-		reverse_proxy production-web:3000
+		reverse_proxy production-web:3000 {
+			header_up X-Forwarded-Proto https
+		}
 	}
 }
 
-{$DEVELOPMENT_API_DOMAIN} {
-	reverse_proxy development-api:4000
+http://{$DEVELOPMENT_API_DOMAIN} {
+	reverse_proxy development-api:4000 {
+		header_up X-Forwarded-Proto https
+	}
 }

@@ -5,9 +5,7 @@ services:
     image: '${CADDY_IMAGE:-caddy:2-alpine}'
     restart: unless-stopped
     ports:
-      - 80:80
-      - 443:443
-      - 443:443/udp
+      - 127.0.0.1:8080:80
     environment:
       PRODUCTION_DOMAIN: '${PRODUCTION_DOMAIN:?PRODUCTION_DOMAIN을 설정하세요}'
       DEVELOPMENT_API_DOMAIN: '${DEVELOPMENT_API_DOMAIN:?DEVELOPMENT_API_DOMAIN을 설정하세요}'
