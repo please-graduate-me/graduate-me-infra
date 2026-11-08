@@ -1,6 +1,6 @@
 # graduate-me-infra
 
-프론트엔드와 백엔드를 함께 실행하고 홈서버의 개발·운영 환경을 관리하는 저장소입니다. 앱 소스와 Dockerfile은 각 앱 저장소에 유지합니다. 실제 비밀값과 DB 데이터는 Git에 저장하지 않습니다.
+사용자 웹, 관리자 웹과 백엔드를 함께 실행하고 홈서버의 개발·운영 환경을 관리하는 저장소입니다. 앱 소스와 Dockerfile은 각 앱 저장소에 유지합니다. 실제 비밀값과 DB 데이터는 Git에 저장하지 않습니다.
 
 ## 파일과 책임
 
@@ -24,6 +24,7 @@
 codding/
 ├── graduate-me-infra/
 ├── graduate-me-frontend/
+├── graduate-me-admin/
 └── graduate-me-backend/
 ```
 
@@ -36,7 +37,7 @@ test -f .env || cp .env.example .env
 pnpm dev
 ```
 
-`pnpm dev` 한 번으로 웹, API, DB, worker를 실행하고 코드 변경을 반영합니다. 백그라운드 실행만 필요하면 `pnpm dev:up`을 사용합니다. 이 명령은 파일 감시를 켜지 않으므로 필요한 경우 아래 명령을 별도 터미널에서 실행합니다.
+`pnpm dev` 한 번으로 사용자 웹, 관리자 웹, API, DB, worker를 실행하고 코드 변경을 반영합니다. 백그라운드 실행만 필요하면 `pnpm dev:up`을 사용합니다. 이 명령은 파일 감시를 켜지 않으므로 필요한 경우 아래 명령을 별도 터미널에서 실행합니다.
 
 ```sh
 docker compose -f compose.yaml -f compose.local.yaml watch --no-up
@@ -44,9 +45,9 @@ pnpm dev:logs
 pnpm dev:down
 ```
 
-웹은 `http://localhost:3000`, API는 `http://localhost:4000`입니다. DB 포트는 로컬의 `15432`입니다. 이 포트들은 모두 `127.0.0.1`에만 연결합니다.
+사용자 웹은 `http://localhost:3000`, 관리자 웹은 `http://localhost:3001`, API는 `http://localhost:4000`입니다. DB 포트는 로컬의 `15432`입니다. 이 포트들은 모두 `127.0.0.1`에만 연결합니다.
 
-기존 개별 Compose에서 전환할 때는 해당 파일 감시와 컨테이너를 먼저 종료합니다. 각 앱 폴더의 `docker compose -f compose.yaml -f compose.dev.yaml down`, 처리기의 `docker compose down`을 사용합니다. 볼륨 삭제 옵션은 사용하지 않습니다.
+기존 개별 Compose에서 전환할 때는 해당 파일 감시와 컨테이너를 먼저 종료합니다. 각 앱 폴더의 `docker compose -f compose.yaml -f compose.dev.yaml down`을 사용합니다. 볼륨 삭제 옵션은 사용하지 않습니다.
 
 기존 DB를 이어 쓰려면 `.env`에 `LOCAL_POSTGRES_VOLUME=graduate-me_postgres_data`를 설정합니다. 새 환경은 기본적으로 `graduate-me-local_postgres_data`를 사용합니다. 한 볼륨에 PostgreSQL 두 개를 동시에 실행하지 않습니다. 기존 Compose와 통합 Compose를 같은 포트로 함께 실행하지 않습니다.
 
@@ -84,13 +85,13 @@ bash scripts/deploy.sh production
 
 비밀 설정 파일에는 해당 예시의 키만 넣습니다. 이미지 버전은 `images/*.env`에서 관리합니다. 운영 `AUTH_URL`은 `https://pleasegraduate.me`로 설정합니다. Google OAuth 리디렉션 URI는 `https://pleasegraduate.me/api/auth/callback/google`로 등록합니다. 운영 프론트는 내부 운영 API만 사용합니다.
 
-배포 스크립트는 이미지 다운로드, DB 기동, API·worker 및 운영 웹 중단, DB 백업, 마이그레이션·seed, 서비스 시작과 상태 확인을 순서대로 수행합니다. 짧은 중단 시간이 있으며 무중단 배포를 제공하지 않습니다. 마이그레이션에 실패하면 앱은 중단된 상태로 남겨 원인을 확인하게 합니다. 운영에서 `down -v`를 실행하지 않습니다.
+배포 스크립트는 이미지 다운로드, DB 기동, API·worker 및 운영 웹 중단, DB 백업, 마이그레이션, 서비스 시작과 상태 확인을 순서대로 수행합니다. 짧은 중단 시간이 있으며 무중단 배포를 제공하지 않습니다. 마이그레이션에 실패하면 앱은 중단된 상태로 남겨 원인을 확인하게 합니다. 운영에서 `down -v`를 실행하지 않습니다.
 
 백업 위치는 `GRADUATE_ME_BACKUP_DIR`로 지정하며 기본값은 비밀 설정 디렉터리의 `backups`입니다. 정기 백업, 별도 장치로의 복사, 보존 기간과 복원 검증은 실제 운영 전 추가해야 합니다. 이미지 버전을 되돌려도 DB 마이그레이션은 자동으로 되돌아가지 않습니다.
 
 ## 운영 데모만 배포
 
-로그인과 신규 영상 처리를 사용하지 않을 때는 Caddy, 운영 프론트, 운영 API와 운영 DB만 실행합니다. 개발 환경, worker는 시작하지 않습니다. 운영 환경변수의 Google OAuth 항목은 비워 둡니다. 최초 데모 자료는 준비된 공개 `/api/demo` 응답을 비밀 설정 디렉터리의 `demo.json`에 저장합니다. 사용자 답안이나 계정 DB는 복제하지 않습니다.
+로그인과 신규 영상 처리를 사용하지 않을 때는 Caddy, 운영 프론트, 운영 API와 운영 DB만 실행합니다. 개발 환경, worker는 시작하지 않습니다. 운영 환경변수의 Google OAuth 항목은 비워 둡니다. 데모 자료는 별도로 준비해 DB에 넣으며 배포 과정에서 자동 등록하지 않습니다.
 
 외부 빌드 장비에서 검증한 `linux/amd64` 이미지를 `docker save`와 `docker load`로 서버에 전달한 경우, 이미지 파일에 전달된 이미지의 digest를 기록하고 다음처럼 실행합니다.
 
@@ -99,7 +100,7 @@ bash scripts/deploy.sh shared --demo --local-images
 bash scripts/deploy.sh production --demo --local-images
 ```
 
-`--local-images`는 레지스트리 다운로드만 생략합니다. DB 백업과 마이그레이션, seed와 상태 확인은 그대로 수행합니다. 최초 체험 자료 가져오기는 기존 구절이 있으면 교체하지 않습니다. 로그인과 신규 처리를 공개하기 전에는 OAuth와 환경별 Gemini·YouTube 키 설정을 완료해야 합니다.
+`--local-images`는 레지스트리 다운로드만 생략합니다. DB 백업, 마이그레이션과 상태 확인은 그대로 수행합니다. 로그인과 신규 처리를 공개하기 전에는 OAuth와 환경별 Gemini·YouTube 키 설정을 완료해야 합니다.
 
 ## 팀원의 로컬 프론트와 개발 API
 
@@ -129,3 +130,11 @@ pnpm check:ci
 포맷과 ESLint 외에 모든 Compose를 실제 Docker Compose로 해석해 서비스 구성, 개발·운영 DB와 네트워크 분리, 공개 포트 제한, 홈서버의 소스 빌드 금지, 비밀값이 없는 예시를 검사합니다. 검사는 DB를 시작하거나 실제 서비스를 변경하지 않습니다. Caddy 설정 변경 시 `caddy validate`도 수행합니다.
 
 참고: [Compose 운영 구성](https://docs.docker.com/compose/how-tos/production/), [Compose 환경변수 파일](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/), [Caddy 환경변수](https://caddyserver.com/docs/caddyfile/concepts), [GitHub self-hosted runner](https://docs.github.com/en/actions/reference/runners/self-hosted-runners).
+
+## 로컬 시작 시 수행하는 작업
+
+API는 DB 마이그레이션 후 시작하며 초기 영상, 추천 영상 레코드, 분석 작업과 데모 자료를 생성하지 않습니다. 데모 자료는 별도 준비 후 DB에 넣습니다. 기존 DB의 데이터와 대기 작업은 유지되므로 worker는 이미 등록된 작업을 처리할 수 있습니다.
+
+API 서버와 worker는 같은 백엔드 저장소의 서로 다른 프로세스입니다. API는 HTTP 요청과 인증·저장을 담당하고 worker는 DB 큐의 영상 분석을 처리합니다. 영상 분석 중에도 API가 요청을 받을 수 있도록 나눕니다.
+
+관리자 웹은 로컬 통합 실행에 포함되며 `http://api:4000`으로 프록시합니다. 홈서버 구성은 기존 배포 구성을 유지하며 관리자 웹의 운영 도메인·이미지 등록은 별도로 설정합니다.

@@ -37,6 +37,7 @@ function config(files) {
 
 const local = config(['compose.yaml', 'compose.local.yaml']);
 assert.deepEqual(Object.keys(local.services).sort(), [
+  'admin',
   'api',
   'db',
   'web',
@@ -49,6 +50,32 @@ assert.equal(
 );
 assert.equal(local.services.api.environment.GEMINI_API_KEY, undefined);
 assert.equal(local.services.web.environment.GEMINI_API_KEY, undefined);
+
+assert.equal(
+  local.services.admin.environment.API_INTERNAL_URL,
+  'http://api:4000'
+);
+assert.equal(local.services.admin.environment.GEMINI_API_KEY, undefined);
+assert.equal(local.services.admin.depends_on.api.condition, 'service_healthy');
+assert.equal(local.services.admin.ports[0].host_ip, '127.0.0.1');
+assert.equal(local.services.admin.ports[0].published, '3001');
+assert.equal(local.services.admin.ports[0].target, 3001);
+assert.equal(local.services.admin.build.dockerfile, 'Dockerfile.dev');
+assert.ok(
+  local.services.admin.develop.watch.some(
+    (entry) =>
+      entry.path.endsWith('graduate-me-admin/vite.config.ts') &&
+      entry.action === 'sync+restart'
+  )
+);
+assert.deepEqual(local.services.api.command, [
+  'sh',
+  '-c',
+  'pnpm db:migrate && pnpm dev:app',
+]);
+const deployScript = readFileSync('scripts/deploy.sh', 'utf8');
+assert.equal(deployScript.includes('db:seed'), false);
+assert.equal(deployScript.includes('seed-demo'), false);
 
 const stages = ['development', 'production'];
 const deployments = stages.map((stage) => config([`compose.${stage}.yaml`]));

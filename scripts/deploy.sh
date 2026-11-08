@@ -57,11 +57,7 @@ if [[ "$stage" != shared ]]; then
   umask 077
   "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_file"
   test -s "$backup_file"
-  "${compose[@]}" run --rm --no-deps api sh -c 'pnpm db:migrate && pnpm db:seed'
-  if [[ "$demo" == 1 ]]; then
-    test -s "$GRADUATE_ME_ENV_DIR/demo.json"
-    "${compose[@]}" run --rm --no-deps -T api pnpm exec tsx src/database/seed-demo.ts < "$GRADUATE_ME_ENV_DIR/demo.json"
-  fi
+  "${compose[@]}" run --rm --no-deps api pnpm db:migrate
 fi
 
 services=()
