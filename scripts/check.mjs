@@ -6,6 +6,7 @@ const env = {
   ...process.env,
   COMPOSE_DISABLE_ENV_FILE: '1',
   AI_PROVIDER: '',
+  MATERIAL_POLICY_PROFILE: '',
   OCR_PROVIDER: '',
   VIDEO_TRANSCRIPTION_PROVIDER: '',
   DB_PASSWORD: 'validation_only_password',
@@ -163,7 +164,7 @@ for (const app of [local, ...deployments]) {
     if (!app.services[name]) continue;
     for (const key of Object.keys(app.services[name].environment)) {
       assert.equal(
-        /^(CLOVA_|OCR_|AI_|ANTHROPIC_|VIDEO_TRANSCRIPTION_PROVIDER|GEMINI_API_KEY|YOUTUBE_API_KEY)/.test(
+        /^(CLOVA_|OCR_|AI_|ANTHROPIC_|MATERIAL_POLICY_PROFILE|VIDEO_TRANSCRIPTION_PROVIDER|GEMINI_API_KEY|YOUTUBE_API_KEY)/.test(
           key
         ),
         false
@@ -175,6 +176,10 @@ for (const app of [local, ...deployments]) {
 for (const [index, app] of [local, ...deployments].entries()) {
   const production = index === 2;
   for (const name of ['api', 'worker']) {
+    assert.equal(
+      app.services[name].environment.MATERIAL_POLICY_PROFILE,
+      production ? 'standard' : 'mvp'
+    );
     assert.equal(
       app.services[name].environment.AI_PROVIDER,
       production ? 'naver' : 'anthropic'

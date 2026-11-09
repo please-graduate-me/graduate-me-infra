@@ -23,6 +23,7 @@ services:
       context: '../graduate-me-backend'
       dockerfile: Dockerfile
     environment:
+      MATERIAL_POLICY_PROFILE: '${MATERIAL_POLICY_PROFILE:-mvp}'
       VIDEO_TRANSCRIPTION_PROVIDER: '${VIDEO_TRANSCRIPTION_PROVIDER:-disabled}'
       DATABASE_URL: postgresql://graduate_me:graduate_me_local@db:5432/graduate_me
       API_PORT: '4000'
@@ -74,6 +75,7 @@ services:
       dockerfile: Dockerfile.worker
     init: true
     environment:
+      MATERIAL_POLICY_PROFILE: '${MATERIAL_POLICY_PROFILE:-mvp}'
       VIDEO_TRANSCRIPTION_PROVIDER: '${VIDEO_TRANSCRIPTION_PROVIDER:-disabled}'
       DATABASE_URL: postgresql://graduate_me:graduate_me_local@db:5432/graduate_me
       GEMINI_API_KEY: '${GEMINI_API_KEY:-}'

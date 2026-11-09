@@ -61,6 +61,8 @@ pnpm dev:down
 
 개발과 운영의 DB 컨테이너, 볼륨, 내부 네트워크를 분리했습니다. DB에는 호스트 공개 포트가 없습니다. Caddy는 호스트의 `127.0.0.1:8080`에만 연결합니다. 홈서버의 cloudflared 서비스가 이 주소로 요청을 전달하며 공유기 포트 포워딩은 사용하지 않습니다. 공개 HTTPS는 Cloudflare에서 처리하고 Tunnel 뒤 Caddy는 HTTP로 실행합니다. 인증 콜백과 보안 쿠키가 HTTPS를 기준으로 동작하도록 Caddy가 업스트림에 `X-Forwarded-Proto: https`를 전달합니다. DB 내부 네트워크는 외부 연결을 차단하고, API와 worker는 각각 필요한 네트워크에 추가로 연결합니다.
 
+개발 환경은 `MATERIAL_POLICY_PROFILE=mvp`를 사용하고 운영 기본값은 `standard`입니다. 현재 자료·AI 한도는 인증된 `/api/learning/policy` 응답에서 확인합니다. MVP의 파일·페이지·영상·AI 상한은 기존 환경 파일의 큰 한도보다 우선합니다. 정책을 바꾸면 API와 worker 환경을 함께 갱신합니다. 실제 기획 기준과 검증 결과는 Notion 구현 현황에서 관리합니다.
+
 공급자 설정은 로컬 `graduate-me-infra/.env`, 홈서버 `development.env` 또는 `production.env`에서 관리합니다. 일반 AI는 `AI_PROVIDER=anthropic|naver`, OCR은 `OCR_PROVIDER=anthropic|clova`로 독립 선택합니다. 공급자를 변경할 때 해당 공급자의 키와 모델도 함께 설정합니다. 자동으로 다른 공급자로 전환하지 않습니다.
 
 로컬과 개발 환경 기본값은 `AI_PROVIDER=anthropic`, `OCR_PROVIDER=anthropic`, `ANTHROPIC_MODEL=claude-sonnet-5-5`입니다. `.env`에 `ANTHROPIC_API_KEY`를 설정하면 API와 영상 번역·빈칸 준비를 담당하는 worker에만 주입됩니다. 학생 웹·관리자 웹·공용 gateway에는 공급자 키를 전달하지 않습니다. 키를 비워도 저장된 자료와 결과를 조회할 수 있습니다. 운영 기본값은 기존 Naver·CLOVA OCR 설정을 유지합니다.
