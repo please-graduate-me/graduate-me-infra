@@ -61,13 +61,15 @@ pnpm dev:down
 
 개발과 운영의 DB 컨테이너, 볼륨, 내부 네트워크를 분리했습니다. DB에는 호스트 공개 포트가 없습니다. Caddy는 호스트의 `127.0.0.1:8080`에만 연결합니다. 홈서버의 cloudflared 서비스가 이 주소로 요청을 전달하며 공유기 포트 포워딩은 사용하지 않습니다. 공개 HTTPS는 Cloudflare에서 처리하고 Tunnel 뒤 Caddy는 HTTP로 실행합니다. 인증 콜백과 보안 쿠키가 HTTPS를 기준으로 동작하도록 Caddy가 업스트림에 `X-Forwarded-Proto: https`를 전달합니다. DB 내부 네트워크는 외부 연결을 차단하고, API와 worker는 각각 필요한 네트워크에 추가로 연결합니다.
 
-worker는 각 환경의 외부 통신용 `egress` 네트워크에서 YouTube Data API와 Gemini API를 직접 호출합니다. `GEMINI_API_KEY`, `YOUTUBE_API_KEY`, `GEMINI_MODEL`은 로컬 `.env` 또는 환경별 `development.env`, `production.env`에 설정합니다. 모델 기본값은 `gemini-3.8-flash`이며 YouTube Data API v3 활성화가 필요합니다. 개발과 운영은 별도 키·쿼터를 사용하는 것을 권장합니다. Gemini·YouTube 키는 worker에만, `CLOVA_STUDIO_API_KEY`는 설명·연습을 처리하는 API와 영상 번역·빈칸 후보를 준비하는 worker에만 주입합니다. 학생 웹·관리자 웹·공용 gateway에는 공급자 키를 주입하지 않습니다. 이 구성은 단일 물리 서버 장애를 분리하지 않습니다.
+공급자 설정은 로컬 `graduate-me-infra/.env`, 홈서버 `development.env` 또는 `production.env`에서 관리합니다. 일반 AI는 `AI_PROVIDER=anthropic|naver`, OCR은 `OCR_PROVIDER=anthropic|clova`로 독립 선택합니다. 공급자를 변경할 때 해당 공급자의 키와 모델도 함께 설정합니다. 자동으로 다른 공급자로 전환하지 않습니다.
 
-CLOVA Studio의 기본 모델은 텍스트 `HCX-007`, 페이지 이미지 `HCX-005`입니다. `CLOVA_TEXT_MODEL`, `CLOVA_IMAGE_MODEL`, `CLOVA_STUDIO_BASE_URL`은 각 환경의 예시 파일에서 관리합니다. 키를 비워 두어도 저장 자료 조회와 기존 문제 재풀이는 사용할 수 있지만 신규 AI 생성은 설정 안내로 종료합니다.
+로컬과 개발 환경 기본값은 `AI_PROVIDER=anthropic`, `OCR_PROVIDER=anthropic`, `ANTHROPIC_MODEL=claude-sonnet-5-5`입니다. `.env`에 `ANTHROPIC_API_KEY`를 설정하면 API와 영상 번역·빈칸 준비를 담당하는 worker에만 주입됩니다. 학생 웹·관리자 웹·공용 gateway에는 공급자 키를 전달하지 않습니다. 키를 비워도 저장된 자료와 결과를 조회할 수 있습니다. 운영 기본값은 기존 Naver·CLOVA OCR 설정을 유지합니다.
 
-`CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`, `OCR_ESTIMATED_USD_PER_PAGE`는 API 서버에만 주입합니다. CLOVA OCR General 도메인의 API Gateway를 활성화한 뒤 콘솔의 HTTPS `/general` 호출 주소와 비밀키를 환경별 파일에 설정합니다. 영어 PDF를 한 페이지씩 명시적으로 인식하고 원본과 별도로 저장하며 태국어 OCR은 지원하지 않습니다. USD 페이지 단가를 비우면 추정 비용은 미집계로 표시합니다. OCR 키는 worker·학생 웹·관리자 웹·gateway에 전달하지 않습니다.
+Naver로 전환할 때는 `CLOVA_STUDIO_API_KEY`, `CLOVA_TEXT_MODEL=HCX-007`, `CLOVA_IMAGE_MODEL=HCX-005`, `CLOVA_STUDIO_BASE_URL`을 설정합니다. CLOVA OCR은 `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`, 선택적인 `OCR_ESTIMATED_USD_PER_PAGE`를 API 서버에만 주입합니다. CLOVA OCR은 영어, Claude OCR은 영어·태국어 경로를 제공합니다. Claude OCR에는 토큰 단가를 적용하고 페이지 단가를 중복 적용하지 않습니다.
 
-`AI_DAILY_REQUEST_LIMIT`, `AI_DAILY_TOKEN_LIMIT`, `AI_CONCURRENT_REQUEST_LIMIT`는 계정별 UTC 한도이며 `AI_PREPARATION_PAGE_LIMIT`는 PDF 최초 준비 페이지 수입니다. `AI_DAILY_BUDGET_USD=0`은 추정 비용 제한을 끕니다. 비용 제한을 켜려면 `AI_NAVER_*_USD_PER_MILLION`, `AI_GEMINI_*_USD_PER_MILLION`의 입력·출력 단가를 함께 설정합니다. 단가 미설정 비용과 실청구 비용은 미집계로 표시합니다. 모델 호출은 자동 재시도하지 않으며 worker를 시작하면 기존 대기 작업을 처리할 수 있습니다. 검증에는 모의 응답을 사용하고 권한 없이 worker를 시작하지 않습니다.
+새 영상 전사는 `VIDEO_TRANSCRIPTION_PROVIDER=gemini|disabled`로 제어합니다. 로컬·개발 기본값인 `disabled`에서는 준비된 영상은 재사용하고 새 분석은 접수하지 않습니다. Claude로 YouTube 영상 전사를 대체하지 않습니다. 운영 기본값은 `gemini`이며 `GEMINI_API_KEY`, `YOUTUBE_API_KEY`, `GEMINI_MODEL`은 worker에만 주입합니다. 별도 허가 없이 worker를 시작하거나 실제 모델을 호출하지 않습니다.
+
+`AI_DAILY_REQUEST_LIMIT`, `AI_DAILY_TOKEN_LIMIT`, `AI_CONCURRENT_REQUEST_LIMIT`는 계정별 UTC 한도이며 `AI_PREPARATION_PAGE_LIMIT`는 PDF 최초 준비 페이지 수입니다. `AI_DAILY_BUDGET_USD=0`은 추정 비용 제한을 끕니다. 비용 제한을 켜려면 선택한 공급자의 `AI_ANTHROPIC_*_USD_PER_MILLION`, `AI_NAVER_*_USD_PER_MILLION`, `AI_GEMINI_*_USD_PER_MILLION` 입력·출력 단가를 설정합니다. 단가 미설정 비용과 실청구 비용은 미집계로 표시합니다. 검증에는 모의 응답을 사용합니다.
 
 초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 1GiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
 

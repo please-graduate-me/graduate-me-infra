@@ -5,6 +5,9 @@ import { spawnSync } from 'node:child_process';
 const env = {
   ...process.env,
   COMPOSE_DISABLE_ENV_FILE: '1',
+  AI_PROVIDER: '',
+  OCR_PROVIDER: '',
+  VIDEO_TRANSCRIPTION_PROVIDER: '',
   DB_PASSWORD: 'validation_only_password',
   AUTH_URL: 'https://app.example.test',
   AUTH_SECRET: 'validation_only_secret_0123456789',
@@ -13,6 +16,10 @@ const env = {
   GEMINI_API_KEY: 'validation_only_gemini_key',
   YOUTUBE_API_KEY: 'validation_only_youtube_key',
   GEMINI_MODEL: 'gemini-3.8-flash',
+  ANTHROPIC_API_KEY: 'validation_only_anthropic_key',
+  ANTHROPIC_MODEL: 'claude-sonnet-5-5',
+  AI_ANTHROPIC_INPUT_USD_PER_MILLION: '5',
+  AI_ANTHROPIC_OUTPUT_USD_PER_MILLION: '6',
   CLOVA_STUDIO_API_KEY: 'validation_only_clova_key',
   CLOVA_TEXT_MODEL: 'HCX-007',
   CLOVA_IMAGE_MODEL: 'HCX-005',
@@ -138,7 +145,8 @@ for (const app of [local, ...deployments]) {
     for (const key of Object.keys(env).filter(
       (key) =>
         (key.startsWith('CLOVA_') && !key.startsWith('CLOVA_OCR_')) ||
-        key.startsWith('AI_')
+        (key.startsWith('AI_') && key !== 'AI_PROVIDER') ||
+        key.startsWith('ANTHROPIC_')
     )) {
       assert.equal(app.services[name].environment[key], env[key]);
     }
@@ -155,11 +163,32 @@ for (const app of [local, ...deployments]) {
     if (!app.services[name]) continue;
     for (const key of Object.keys(app.services[name].environment)) {
       assert.equal(
-        /^(CLOVA_|OCR_|AI_|GEMINI_API_KEY|YOUTUBE_API_KEY)/.test(key),
+        /^(CLOVA_|OCR_|AI_|ANTHROPIC_|VIDEO_TRANSCRIPTION_PROVIDER|GEMINI_API_KEY|YOUTUBE_API_KEY)/.test(
+          key
+        ),
         false
       );
     }
   }
+}
+// 개발 기본값과 운영 기본값을 분리하며 공급자 선택도 환경설정으로 교체한다.
+for (const [index, app] of [local, ...deployments].entries()) {
+  const production = index === 2;
+  for (const name of ['api', 'worker']) {
+    assert.equal(
+      app.services[name].environment.AI_PROVIDER,
+      production ? 'naver' : 'anthropic'
+    );
+    assert.equal(
+      app.services[name].environment.VIDEO_TRANSCRIPTION_PROVIDER,
+      production ? 'gemini' : 'disabled'
+    );
+  }
+  assert.equal(
+    app.services.api.environment.OCR_PROVIDER,
+    production ? 'clova' : 'anthropic'
+  );
+  assert.equal(app.services.worker.environment.OCR_PROVIDER, undefined);
 }
 const shared = config(['compose.shared.yaml']);
 assert.equal(shared.services.gateway.ports.length, 1);
