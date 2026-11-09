@@ -17,6 +17,9 @@ const env = {
   CLOVA_TEXT_MODEL: 'HCX-007',
   CLOVA_IMAGE_MODEL: 'HCX-005',
   CLOVA_STUDIO_BASE_URL: 'https://clovastudio.stream.ntruss.com',
+  CLOVA_OCR_INVOKE_URL: 'https://validation.apigw.ntruss.com/general',
+  CLOVA_OCR_SECRET_KEY: 'validation_only_ocr_key',
+  OCR_ESTIMATED_USD_PER_PAGE: '0.002',
   AI_DAILY_REQUEST_LIMIT: '17',
   AI_DAILY_TOKEN_LIMIT: '45000',
   AI_CONCURRENT_REQUEST_LIMIT: '1',
@@ -133,16 +136,26 @@ assert.notEqual(
 for (const app of [local, ...deployments]) {
   for (const name of ['api', 'worker']) {
     for (const key of Object.keys(env).filter(
-      (key) => key.startsWith('CLOVA_') || key.startsWith('AI_')
+      (key) =>
+        (key.startsWith('CLOVA_') && !key.startsWith('CLOVA_OCR_')) ||
+        key.startsWith('AI_')
     )) {
       assert.equal(app.services[name].environment[key], env[key]);
     }
+  }
+  for (const key of [
+    'CLOVA_OCR_INVOKE_URL',
+    'CLOVA_OCR_SECRET_KEY',
+    'OCR_ESTIMATED_USD_PER_PAGE',
+  ]) {
+    assert.equal(app.services.api.environment[key], env[key]);
+    assert.equal(app.services.worker.environment[key], undefined);
   }
   for (const name of ['web', 'admin']) {
     if (!app.services[name]) continue;
     for (const key of Object.keys(app.services[name].environment)) {
       assert.equal(
-        /^(CLOVA_|AI_|GEMINI_API_KEY|YOUTUBE_API_KEY)/.test(key),
+        /^(CLOVA_|OCR_|AI_|GEMINI_API_KEY|YOUTUBE_API_KEY)/.test(key),
         false
       );
     }
@@ -200,7 +213,7 @@ for (const file of [
   const lines = readFileSync(file, 'utf8').split('\n');
   for (const line of lines) {
     if (
-      /^(DB_PASSWORD|AUTH_SECRET|AUTH_GOOGLE_SECRET|GEMINI_API_KEY|YOUTUBE_API_KEY|CLOVA_STUDIO_API_KEY)=/.test(
+      /^(DB_PASSWORD|AUTH_SECRET|AUTH_GOOGLE_SECRET|GEMINI_API_KEY|YOUTUBE_API_KEY|CLOVA_STUDIO_API_KEY|CLOVA_OCR_INVOKE_URL|CLOVA_OCR_SECRET_KEY)=/.test(
         line
       )
     ) {

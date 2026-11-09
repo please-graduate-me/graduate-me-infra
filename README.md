@@ -65,6 +65,8 @@ worker는 각 환경의 외부 통신용 `egress` 네트워크에서 YouTube Dat
 
 CLOVA Studio의 기본 모델은 텍스트 `HCX-007`, 페이지 이미지 `HCX-005`입니다. `CLOVA_TEXT_MODEL`, `CLOVA_IMAGE_MODEL`, `CLOVA_STUDIO_BASE_URL`은 각 환경의 예시 파일에서 관리합니다. 키를 비워 두어도 저장 자료 조회와 기존 문제 재풀이는 사용할 수 있지만 신규 AI 생성은 설정 안내로 종료합니다.
 
+`CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`, `OCR_ESTIMATED_USD_PER_PAGE`는 API 서버에만 주입합니다. CLOVA OCR General 도메인의 API Gateway를 활성화한 뒤 콘솔의 HTTPS `/general` 호출 주소와 비밀키를 환경별 파일에 설정합니다. 영어 PDF를 한 페이지씩 명시적으로 인식하고 원본과 별도로 저장하며 태국어 OCR은 지원하지 않습니다. USD 페이지 단가를 비우면 추정 비용은 미집계로 표시합니다. OCR 키는 worker·학생 웹·관리자 웹·gateway에 전달하지 않습니다.
+
 `AI_DAILY_REQUEST_LIMIT`, `AI_DAILY_TOKEN_LIMIT`, `AI_CONCURRENT_REQUEST_LIMIT`는 계정별 UTC 한도이며 `AI_PREPARATION_PAGE_LIMIT`는 PDF 최초 준비 페이지 수입니다. `AI_DAILY_BUDGET_USD=0`은 추정 비용 제한을 끕니다. 비용 제한을 켜려면 `AI_NAVER_*_USD_PER_MILLION`, `AI_GEMINI_*_USD_PER_MILLION`의 입력·출력 단가를 함께 설정합니다. 단가 미설정 비용과 실청구 비용은 미집계로 표시합니다. 모델 호출은 자동 재시도하지 않으며 worker를 시작하면 기존 대기 작업을 처리할 수 있습니다. 검증에는 모의 응답을 사용하고 권한 없이 worker를 시작하지 않습니다.
 
 초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 1GiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
