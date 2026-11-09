@@ -6,6 +6,12 @@ http://{$PRODUCTION_DOMAIN} {
 			header_up X-Forwarded-Proto https
 		}
 	}
+	redir /admin /admin/ 308
+	handle_path /admin/* {
+		reverse_proxy production-admin:3001 {
+			header_up X-Forwarded-Proto https
+		}
+	}
 	handle {
 		reverse_proxy production-web:3000 {
 			header_up X-Forwarded-Proto https

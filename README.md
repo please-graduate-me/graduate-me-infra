@@ -8,7 +8,7 @@
 | --- | --- |
 | `compose.yaml` + `compose.local.yaml` | 개발자 PC에서 모든 서비스를 함께 실행하고 소스 변경 반영 |
 | `compose.development.yaml` | 홈서버의 개발 API, worker, 개발 PostgreSQL |
-| `compose.production.yaml` | 홈서버의 운영 프론트, API, worker, 운영 PostgreSQL |
+| `compose.production.yaml` | 홈서버의 학생·관리자 앱, API, worker, 운영 PostgreSQL |
 | `compose.shared.yaml` | 공용 Caddy와 환경별 진입 네트워크 |
 | `Caddyfile` | Tunnel 내부 HTTP 요청을 운영 웹과 개발 API로 전달 |
 | `images/*.env` | 실제 배포할 이미지 버전 기록, 비밀값 없음 |
@@ -55,7 +55,7 @@ pnpm dev:down
 
 홈서버는 Ubuntu 24.04의 Intel 맥미니이며 `linux/amd64` 이미지를 사용합니다. SSH 관리는 Tailscale의 `ssh jaejoon-server`로 접속합니다. 재부팅 후 Docker와 cloudflared가 자동으로 시작되는지 확인합니다. GitHub의 Linux runner에서 빌드하고 홈서버는 이미지를 실행하는 역할만 맡깁니다.
 
-- 운영: 프론트 1개, API 1개, worker 1개, PostgreSQL 1개
+- 운영: 학생 웹 1개, 관리자 웹 1개, API 1개, worker 1개, PostgreSQL 1개
 - 개발: API 1개, worker 1개, PostgreSQL 1개
 - 공용: Caddy 1개
 
@@ -147,4 +147,12 @@ API는 DB 마이그레이션 후 시작하며 초기 영상, 추천 영상 레�
 
 API 서버와 worker는 같은 백엔드 저장소의 서로 다른 프로세스입니다. API는 HTTP 요청과 인증·저장을 담당하고 worker는 DB 큐의 영상 분석을 처리합니다. 영상 분석 중에도 API가 요청을 받을 수 있도록 나눕니다.
 
-관리자 웹은 로컬 통합 실행에 포함되며 `http://api:4000`으로 프록시합니다. 홈서버 구성은 기존 배포 구성을 유지하며 관리자 웹의 운영 도메인·이미지 등록은 별도로 설정합니다.
+관리자 웹은 로컬 통합 실행에 포함되며 `http://api:4000`으로 프록시합니다. 홈서버에서는 `images/production.env`의 관리자 이미지와 `/admin/` 경로를 사용합니다.
+
+## worker를 중지한 MVP 운영 배포
+
+운영 관리자 앱은 학생 서비스와 같은 출처의 `https://pleasegraduate.me/admin`에서 제공합니다. `ADMIN_APP_URL`에도 이 주소를 지정합니다. Google OAuth 콜백은 `https://pleasegraduate.me/api/auth/callback/google`이며 같은 호스트의 세션 쿠키를 사용합니다. 관리자 이미지는 `docker build --platform linux/amd64 --build-arg ADMIN_BASE_PATH=/admin/`로 빌드합니다.
+
+일반 로그인과 모든 앱을 포함하되 worker를 실행하지 않을 때는 `bash scripts/deploy.sh production --without-worker --local-images`를 사용합니다. 이 경로는 DB 백업, 마이그레이션, API·학생·관리자 서비스 기동과 상태 확인을 수행합니다. 기존 worker도 먼저 중지합니다. 외부에서 빌드한 linux/amd64 이미지를 먼저 전달해야 합니다.
+
+MVP 비밀 설정에는 `MATERIAL_POLICY_PROFILE=mvp`, `AI_PROVIDER=anthropic`, `OCR_PROVIDER=anthropic`, `ANTHROPIC_MODEL=claude-sonnet-5-5`, `VIDEO_TRANSCRIPTION_PROVIDER=disabled`를 명시합니다. 운영 기본값은 이 설정을 대신하지 않습니다.

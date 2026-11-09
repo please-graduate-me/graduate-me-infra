@@ -41,6 +41,7 @@ const env = {
   DEVELOPMENT_API_DOMAIN: 'dev-api.example.test',
   API_IMAGE: 'example/api:validation',
   WEB_IMAGE: 'example/web:validation',
+  ADMIN_IMAGE: 'example/admin:validation',
 };
 
 function config(files) {
@@ -203,7 +204,14 @@ assert.equal(shared.services.gateway.ports[0].target, 80);
 const caddyfile = readFileSync('Caddyfile', 'utf8');
 assert.ok(caddyfile.includes('http://{$PRODUCTION_DOMAIN}'));
 assert.ok(caddyfile.includes('http://{$DEVELOPMENT_API_DOMAIN}'));
-assert.equal(caddyfile.match(/header_up X-Forwarded-Proto https/g)?.length, 3);
+assert.equal(caddyfile.match(/header_up X-Forwarded-Proto https/g)?.length, 4);
+assert.ok(caddyfile.includes('reverse_proxy production-admin:3001'));
+assert.ok(deployScript.includes('--without-worker'));
+assert.equal(deployments[1].services.admin.image, env.ADMIN_IMAGE);
+assert.equal(
+  deployments[1].services.admin.environment.API_INTERNAL_URL,
+  'http://production-api:4000'
+);
 assert.deepEqual(Object.keys(shared.services), ['gateway']);
 for (const [index, app] of deployments.entries()) {
   const stage = stages[index];

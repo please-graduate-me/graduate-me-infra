@@ -7,6 +7,11 @@ on:
         required: true
         type: choice
         options: [development, production, shared]
+      without_worker:
+        description: worker를 중지한 채 배포
+        required: true
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -22,7 +27,11 @@ jobs:
           persist-credentials: false
       - name: 지정한 환경 배포
         env:
+          WITHOUT_WORKER: ${{ inputs.without_worker }}
           DEPLOY_TARGET: ${{ inputs.target }}
           GRADUATE_ME_ENV_DIR: ${{ vars.GRADUATE_ME_ENV_DIR }}
           GRADUATE_ME_BACKUP_DIR: ${{ vars.GRADUATE_ME_BACKUP_DIR }}
-        run: bash scripts/deploy.sh "$DEPLOY_TARGET"
+        run: |
+          options=()
+          if [[ "$WITHOUT_WORKER" == true ]]; then options+=(--without-worker); fi
+          bash scripts/deploy.sh "$DEPLOY_TARGET" "${options[@]}"

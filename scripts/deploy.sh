@@ -9,8 +9,10 @@ esac
 
 demo=0
 local_images=0
+without_worker=0
 for option in "${@:2}"; do
   case "$option" in
+    --without-worker) without_worker=1 ;;
     --demo) demo=1 ;;
     --local-images) local_images=1 ;;
     *) echo "지원하지 않는 옵션: $option" >&2; exit 1 ;;
@@ -47,7 +49,7 @@ if [[ "$stage" != shared ]]; then
   docker network inspect "${networks[@]}" >/dev/null
   "${compose[@]}" up -d --wait db
   services=(worker api)
-  if [[ "$stage" == production ]]; then services+=(web); fi
+  if [[ "$stage" == production ]]; then services+=(web admin); fi
   # 이전 앱이 변경 중인 스키마를 사용하지 않도록 잠시 중단한다.
   "${compose[@]}" stop "${services[@]}"
   backup_dir="${GRADUATE_ME_BACKUP_DIR:-$GRADUATE_ME_ENV_DIR/backups}"
@@ -60,9 +62,18 @@ if [[ "$stage" != shared ]]; then
   "${compose[@]}" run --rm --no-deps api pnpm db:migrate
 fi
 
-services=()
+case "$stage" in
+  shared) services=(gateway) ;;
+  production) services=(api web admin worker) ;;
+  development) services=(api worker) ;;
+esac
 if [[ "$demo" == 1 ]]; then
-  if [[ "$stage" == shared ]]; then services=(gateway); else services=(api web); fi
+  if [[ "$stage" == shared ]]; then services=(gateway); else services=(api web admin); fi
+fi
+if [[ "$without_worker" == 1 && "$stage" != shared ]]; then
+  # 명시한 서비스만 시작해 대기 작업의 외부 모델 호출을 막는다.
+  services=(api)
+  if [[ "$stage" == production ]]; then services+=(web admin); fi
 fi
 "${compose[@]}" up -d --wait --remove-orphans --wait-timeout 180 "${services[@]}"
 "${compose[@]}" ps
