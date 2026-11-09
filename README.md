@@ -33,7 +33,7 @@ Node.js 22, pnpm 10.33.0, Docker Compose가 필요합니다. 기존 저장소의
 ```sh
 pnpm install --frozen-lockfile
 test -f .env || cp .env.example .env
-# .env에 인증 정보, GEMINI_API_KEY와 YOUTUBE_API_KEY을 설정합니다.
+# .env에 인증 정보와 사용할 공급자 키를 설정합니다.
 pnpm dev
 ```
 
@@ -61,7 +61,11 @@ pnpm dev:down
 
 개발과 운영의 DB 컨테이너, 볼륨, 내부 네트워크를 분리했습니다. DB에는 호스트 공개 포트가 없습니다. Caddy는 호스트의 `127.0.0.1:8080`에만 연결합니다. 홈서버의 cloudflared 서비스가 이 주소로 요청을 전달하며 공유기 포트 포워딩은 사용하지 않습니다. 공개 HTTPS는 Cloudflare에서 처리하고 Tunnel 뒤 Caddy는 HTTP로 실행합니다. 인증 콜백과 보안 쿠키가 HTTPS를 기준으로 동작하도록 Caddy가 업스트림에 `X-Forwarded-Proto: https`를 전달합니다. DB 내부 네트워크는 외부 연결을 차단하고, API와 worker는 각각 필요한 네트워크에 추가로 연결합니다.
 
-worker는 각 환경의 외부 통신용 `egress` 네트워크에서 YouTube Data API와 Gemini API를 직접 호출합니다. `GEMINI_API_KEY`, `YOUTUBE_API_KEY`, `GEMINI_MODEL`은 로컬 `.env` 또는 환경별 `development.env`, `production.env`에 설정합니다. 모델 기본값은 `gemini-3.8-flash`이며 YouTube Data API v3 활성화가 필요합니다. 개발과 운영은 별도 키·쿼터를 사용하는 것을 권장합니다. API·웹·공용 gateway에는 분석 키를 주입하지 않습니다. 이 구성은 단일 물리 서버 장애를 분리하지 않습니다.
+worker는 각 환경의 외부 통신용 `egress` 네트워크에서 YouTube Data API와 Gemini API를 직접 호출합니다. `GEMINI_API_KEY`, `YOUTUBE_API_KEY`, `GEMINI_MODEL`은 로컬 `.env` 또는 환경별 `development.env`, `production.env`에 설정합니다. 모델 기본값은 `gemini-3.8-flash`이며 YouTube Data API v3 활성화가 필요합니다. 개발과 운영은 별도 키·쿼터를 사용하는 것을 권장합니다. Gemini·YouTube 키는 worker에만, `CLOVA_STUDIO_API_KEY`는 설명·연습을 처리하는 API와 영상 번역·빈칸 후보를 준비하는 worker에만 주입합니다. 학생 웹·관리자 웹·공용 gateway에는 공급자 키를 주입하지 않습니다. 이 구성은 단일 물리 서버 장애를 분리하지 않습니다.
+
+CLOVA Studio의 기본 모델은 텍스트 `HCX-007`, 페이지 이미지 `HCX-005`입니다. `CLOVA_TEXT_MODEL`, `CLOVA_IMAGE_MODEL`, `CLOVA_STUDIO_BASE_URL`은 각 환경의 예시 파일에서 관리합니다. 키를 비워 두어도 저장 자료 조회와 기존 문제 재풀이는 사용할 수 있지만 신규 AI 생성은 설정 안내로 종료합니다.
+
+`AI_DAILY_REQUEST_LIMIT`, `AI_DAILY_TOKEN_LIMIT`, `AI_CONCURRENT_REQUEST_LIMIT`는 계정별 UTC 한도이며 `AI_PREPARATION_PAGE_LIMIT`는 PDF 최초 준비 페이지 수입니다. `AI_DAILY_BUDGET_USD=0`은 추정 비용 제한을 끕니다. 비용 제한을 켜려면 `AI_NAVER_*_USD_PER_MILLION`, `AI_GEMINI_*_USD_PER_MILLION`의 입력·출력 단가를 함께 설정합니다. 단가 미설정 비용과 실청구 비용은 미집계로 표시합니다. 모델 호출은 자동 재시도하지 않으며 worker를 시작하면 기존 대기 작업을 처리할 수 있습니다. 검증에는 모의 응답을 사용하고 권한 없이 worker를 시작하지 않습니다.
 
 초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 1GiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
 
@@ -100,7 +104,7 @@ bash scripts/deploy.sh shared --demo --local-images
 bash scripts/deploy.sh production --demo --local-images
 ```
 
-`--local-images`는 레지스트리 다운로드만 생략합니다. DB 백업, 마이그레이션과 상태 확인은 그대로 수행합니다. 로그인과 신규 처리를 공개하기 전에는 OAuth와 환경별 Gemini·YouTube 키 설정을 완료해야 합니다.
+`--local-images`는 레지스트리 다운로드만 생략합니다. DB 백업, 마이그레이션과 상태 확인은 그대로 수행합니다. 로그인과 신규 처리를 공개하기 전에는 OAuth와 환경별 CLOVA·Gemini·YouTube 키 설정을 완료해야 합니다.
 
 ## 팀원의 로컬 프론트와 개발 API
 

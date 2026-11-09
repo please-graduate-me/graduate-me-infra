@@ -13,6 +13,19 @@ const env = {
   GEMINI_API_KEY: 'validation_only_gemini_key',
   YOUTUBE_API_KEY: 'validation_only_youtube_key',
   GEMINI_MODEL: 'gemini-3.8-flash',
+  CLOVA_STUDIO_API_KEY: 'validation_only_clova_key',
+  CLOVA_TEXT_MODEL: 'HCX-007',
+  CLOVA_IMAGE_MODEL: 'HCX-005',
+  CLOVA_STUDIO_BASE_URL: 'https://clovastudio.stream.ntruss.com',
+  AI_DAILY_REQUEST_LIMIT: '17',
+  AI_DAILY_TOKEN_LIMIT: '45000',
+  AI_CONCURRENT_REQUEST_LIMIT: '1',
+  AI_PREPARATION_PAGE_LIMIT: '4',
+  AI_DAILY_BUDGET_USD: '2',
+  AI_NAVER_INPUT_USD_PER_MILLION: '1',
+  AI_NAVER_OUTPUT_USD_PER_MILLION: '2',
+  AI_GEMINI_INPUT_USD_PER_MILLION: '3',
+  AI_GEMINI_OUTPUT_USD_PER_MILLION: '4',
   PRODUCTION_DOMAIN: 'app.example.test',
   DEVELOPMENT_API_DOMAIN: 'dev-api.example.test',
   API_IMAGE: 'example/api:validation',
@@ -116,6 +129,25 @@ assert.notEqual(
   deployments[0].networks.database.name,
   deployments[1].networks.database.name
 );
+// 공급자 키와 한도는 서버에만 주입하며 브라우저 앱의 환경으로 복제하지 않는다.
+for (const app of [local, ...deployments]) {
+  for (const name of ['api', 'worker']) {
+    for (const key of Object.keys(env).filter(
+      (key) => key.startsWith('CLOVA_') || key.startsWith('AI_')
+    )) {
+      assert.equal(app.services[name].environment[key], env[key]);
+    }
+  }
+  for (const name of ['web', 'admin']) {
+    if (!app.services[name]) continue;
+    for (const key of Object.keys(app.services[name].environment)) {
+      assert.equal(
+        /^(CLOVA_|AI_|GEMINI_API_KEY|YOUTUBE_API_KEY)/.test(key),
+        false
+      );
+    }
+  }
+}
 const shared = config(['compose.shared.yaml']);
 assert.equal(shared.services.gateway.ports.length, 1);
 assert.equal(shared.services.gateway.ports[0].host_ip, '127.0.0.1');
@@ -168,7 +200,7 @@ for (const file of [
   const lines = readFileSync(file, 'utf8').split('\n');
   for (const line of lines) {
     if (
-      /^(DB_PASSWORD|AUTH_SECRET|AUTH_GOOGLE_SECRET|GEMINI_API_KEY|YOUTUBE_API_KEY)=/.test(
+      /^(DB_PASSWORD|AUTH_SECRET|AUTH_GOOGLE_SECRET|GEMINI_API_KEY|YOUTUBE_API_KEY|CLOVA_STUDIO_API_KEY)=/.test(
         line
       )
     ) {
