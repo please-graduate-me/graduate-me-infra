@@ -75,5 +75,10 @@ if [[ "$without_worker" == 1 && "$stage" != shared ]]; then
   services=(api)
   if [[ "$stage" == production ]]; then services+=(web admin); fi
 fi
-"${compose[@]}" up -d --wait --remove-orphans --wait-timeout 180 "${services[@]}"
+start_options=(--wait-timeout 180)
+if [[ "$stage" == shared ]]; then
+  # 구성 파일 교체 후 이전 inode를 가리키는 bind mount도 새로 연결한다.
+  start_options+=(--force-recreate)
+fi
+"${compose[@]}" up -d --wait --remove-orphans "${start_options[@]}" "${services[@]}"
 "${compose[@]}" ps
