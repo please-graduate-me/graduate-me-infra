@@ -60,6 +60,14 @@ assert.equal(local.services.admin.depends_on.api.condition, 'service_healthy');
 assert.equal(local.services.admin.ports[0].host_ip, '127.0.0.1');
 assert.equal(local.services.admin.ports[0].published, '3001');
 assert.equal(local.services.admin.ports[0].target, 3001);
+assert.equal(
+  local.services.api.environment.ADMIN_URL,
+  `http://localhost:${env.ADMIN_PORT || '3001'}`
+);
+assert.equal(
+  local.services.web.environment.ADMIN_APP_URL,
+  local.services.api.environment.ADMIN_URL
+);
 assert.equal(local.services.admin.build.dockerfile, 'Dockerfile.dev');
 assert.ok(
   local.services.admin.develop.watch.some(

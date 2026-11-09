@@ -30,6 +30,7 @@ services:
       DATABASE_URL: postgresql://graduate_me:${DB_PASSWORD:?DB_PASSWORD를 설정하세요}@db:5432/graduate_me_production
       API_PORT: '4000'
       AUTH_URL: '${AUTH_URL:?AUTH_URL을 설정하세요}'
+      ADMIN_URL: '${ADMIN_APP_URL:-}'
       AUTH_SECRET: '${AUTH_SECRET:?AUTH_SECRET을 설정하세요}'
       AUTH_GOOGLE_ID: '${AUTH_GOOGLE_ID:-}'
       AUTH_GOOGLE_SECRET: '${AUTH_GOOGLE_SECRET:-}'
@@ -91,6 +92,7 @@ services:
   web:
     environment:
       API_INTERNAL_URL: http://production-api:4000
+      ADMIN_APP_URL: '${ADMIN_APP_URL:-}'
     healthcheck:
       test:
         - CMD
