@@ -166,6 +166,6 @@ MVP 비밀 설정에는 `MATERIAL_POLICY_PROFILE=mvp`, `AI_PROVIDER=anthropic`, 
 
 ## 요청 로그와 학생 화면 단독 배포
 
-운영 API의 요청 로그는 `ssh jaejoon-server 'docker logs -f --tail 100 graduate-me-production-api-1'`로 조회합니다. 각 완료 요청은 UTC 시각·서버 요청 ID·HTTP 메서드·라우트 패턴·상태·소요 시간·안전한 오류 코드만 기록합니다. 원문·요청 본문·쿼리·쿠키·키·IP는 API 요청 로그에 기록하지 않습니다. 관리자 `/usage`는 AI 실행 원장과 영상 처리 이력이며 전체 HTTP 로그 화면과 구분합니다.
+운영 API의 요청 로그는 `ssh jaejoon-server 'docker logs -f --tail 100 graduate-me-production-api-1'`로 조회합니다. 각 완료 요청은 한국 시각(`+09:00`)·서버 요청 ID·HTTP 메서드·라우트 패턴·상태·소요 시간·안전한 오류 코드만 기록합니다. 원문·요청 본문·쿼리·쿠키·키·IP는 API 요청 로그에 기록하지 않습니다. 관리자 `/usage`는 AI 실행 원장과 영상 처리 이력이며 전체 HTTP 로그 화면과 구분합니다.
 
 API 이미지·설정·계약을 바꾸지 않는 학생 화면 수정은 `bash scripts/deploy.sh production --web-only --without-worker --local-images`로 배포할 수 있습니다. 이 경로는 실행 중 API가 healthy이고 구성 해시가 일치하는지 먼저 검사하고 학생 컨테이너만 갱신합니다. DB 백업·마이그레이션·API 중단은 수행하지 않으며 worker도 시작하지 않습니다. API 설정이나 스키마를 바꿀 때는 기존 일반 배포의 백업·마이그레이션 순서를 사용합니다.
