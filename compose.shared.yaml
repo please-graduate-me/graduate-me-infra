@@ -8,6 +8,7 @@ services:
       - 127.0.0.1:8080:80
     environment:
       PRODUCTION_DOMAIN: '${PRODUCTION_DOMAIN:?PRODUCTION_DOMAIN을 설정하세요}'
+      ADMIN_DOMAIN: '${ADMIN_DOMAIN:?ADMIN_DOMAIN을 설정하세요}'
       DEVELOPMENT_API_DOMAIN: '${DEVELOPMENT_API_DOMAIN:?DEVELOPMENT_API_DOMAIN을 설정하세요}'
     volumes:
       - './Caddyfile:/etc/caddy/Caddyfile:ro'

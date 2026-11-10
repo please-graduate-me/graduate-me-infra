@@ -77,9 +77,9 @@ Naver로 전환할 때는 `CLOVA_STUDIO_API_KEY`, `CLOVA_TEXT_MODEL=HCX-007`, `C
 
 ## 홈서버 설정과 최초 배포
 
-홈서버 SSH 주소는 `jaejoon-server`, 운영 도메인은 `pleasegraduate.me`, 개발 API 도메인은 `dev-api.pleasegraduate.me`입니다. 실제 이미지 버전과 배포 runner는 별도로 준비해야 합니다. `configure-me` 이미지 값이 남아 있으면 배포 스크립트가 중단됩니다. 이 저장소를 만드는 것만으로 운영 서비스가 배포되지는 않습니다.
+홈서버 SSH 주소는 `jaejoon-server`, 학생 운영 도메인은 `pleasegraduate.me`, 관리자 도메인은 `admin.pleasegraduate.me`, 개발 API 도메인은 `dev-api.pleasegraduate.me`입니다. 실제 이미지 버전과 배포 runner는 별도로 준비해야 합니다. `configure-me` 이미지 값이 남아 있으면 배포 스크립트가 중단됩니다. 이 저장소를 만드는 것만으로 운영 서비스가 배포되지는 않습니다.
 
-1. Cloudflare에서 도메인을 활성화하고 `graduate-me` Tunnel을 생성합니다. 홈서버에 Linux amd64용 cloudflared를 서비스로 설치합니다. Published application route에서 `pleasegraduate.me`와 `dev-api.pleasegraduate.me`를 각각 `http://127.0.0.1:8080`에 연결합니다. Caddy의 호스트별 분기를 위해 HTTP Host Header를 별도 주소로 덮어쓰지 않습니다. Tunnel이 DNS 레코드를 만들므로 홈서버 공인 IP를 가리키는 A 레코드는 필요하지 않습니다. 토큰은 서버에서만 사용하고 Git에 넣지 않습니다.
+1. Cloudflare에서 도메인을 활성화하고 `graduate-me` Tunnel을 생성합니다. 홈서버에 Linux amd64용 cloudflared를 서비스로 설치합니다. Published application route에서 `pleasegraduate.me`, `admin.pleasegraduate.me`, `dev-api.pleasegraduate.me`를 각각 `http://127.0.0.1:8080`에 연결합니다. Caddy의 호스트별 분기를 위해 HTTP Host Header를 별도 주소로 덮어쓰지 않습니다. Tunnel이 DNS 레코드를 만들므로 홈서버 공인 IP를 가리키는 A 레코드는 필요하지 않습니다. 토큰은 서버에서만 사용하고 Git에 넣지 않습니다.
 2. 홈서버에 저장소 밖의 비밀 설정 디렉터리를 만들고 접근 권한을 제한합니다. `env/shared.env.example`, `env/development.env.example`, `env/production.env.example`을 각각 `shared.env`, `development.env`, `production.env`로 복사해 채웁니다.
 3. DB 비밀번호와 AUTH_SECRET은 환경별로 `openssl rand -hex 32`로 생성합니다. DB 비밀번호는 연결 URL에서 사용하므로 이 형식을 유지합니다. OAuth 클라이언트도 환경별로 나눕니다. 초기화 후 DB 비밀번호 변경은 PostgreSQL 계정 변경 절차가 별도로 필요합니다.
 4. GitHub 이미지 빌드에서 생성한 실제 커밋 태그나 digest를 `images/*.env`에 기록하고 커밋합니다. 백엔드 이미지 하나를 API와 worker가 서로 다른 시작 명령으로 사용합니다.
@@ -147,11 +147,16 @@ API는 DB 마이그레이션 후 시작하며 초기 영상, 추천 영상 레�
 
 API 서버와 worker는 같은 백엔드 저장소의 서로 다른 프로세스입니다. API는 HTTP 요청과 인증·저장을 담당하고 worker는 DB 큐의 영상 분석을 처리합니다. 영상 분석 중에도 API가 요청을 받을 수 있도록 나눕니다.
 
-관리자 웹은 로컬 통합 실행에 포함되며 `http://api:4000`으로 프록시합니다. 홈서버에서는 `images/production.env`의 관리자 이미지와 `/admin/` 경로를 사용합니다.
+관리자 웹은 로컬 통합 실행에 포함되며 `http://api:4000`으로 프록시합니다. 홈서버에서는 `images/production.env`의 관리자 이미지를 별도 `admin.pleasegraduate.me` 호스트의 루트 경로로 제공합니다.
 
 ## worker를 중지한 MVP 운영 배포
 
-운영 관리자 앱은 학생 서비스와 같은 출처의 `https://pleasegraduate.me/admin`에서 제공합니다. `ADMIN_APP_URL`에도 이 주소를 지정합니다. Google OAuth 콜백은 `https://pleasegraduate.me/api/auth/callback/google`이며 같은 호스트의 세션 쿠키를 사용합니다. 관리자 이미지는 `docker build --platform linux/amd64 --build-arg ADMIN_BASE_PATH=/admin/`로 빌드합니다.
+운영 관리자 앱은 `https://admin.pleasegraduate.me/`에서 제공합니다. `production.env`의 `ADMIN_APP_URL`에도 이 주소를 지정하고 `shared.env`의 `ADMIN_DOMAIN=admin.pleasegraduate.me`를 설정합니다. 관리자 이미지는 `docker build --platform linux/amd64 --build-arg ADMIN_BASE_PATH=/ --build-arg VITE_STUDENT_URL=https://pleasegraduate.me`로 빌드합니다. 학생 도메인의 기존 `/admin`과 `/admin/*` 주소는 관리자 호스트의 대응 경로로 리디렉션합니다.
+
+Cloudflare Tunnel의 관리자 Published application route는 서비스 `HTTP`, URL `127.0.0.1:8080`으로 연결하고 HTTP Host Header는 덮어쓰지 않습니다. Caddy가 호스트로 학생·관리자를 분기하며 각 호스트의 `/api`는 같은 운영 API에 전달합니다. 백엔드는 등록한 학생·관리자 호스트에서 각각 OAuth를 완료하고 host-only 세션 쿠키를 사용합니다. 학생 로그인과 관리자 로그인은 호스트별로 수행하며 상위 도메인 쿠키로 공유하지 않습니다. Google OAuth의 승인된 리디렉션 URI에는 학생·관리자 콜백을 모두 등록합니다. 기존 학생 콜백은 유지합니다.
+
+- `https://pleasegraduate.me/api/auth/callback/google`
+- `https://admin.pleasegraduate.me/api/auth/callback/google`
 
 일반 로그인과 모든 앱을 포함하되 worker를 실행하지 않을 때는 `bash scripts/deploy.sh production --without-worker --local-images`를 사용합니다. 이 경로는 DB 백업, 마이그레이션, API·학생·관리자 서비스 기동과 상태 확인을 수행합니다. 기존 worker도 먼저 중지합니다. 외부에서 빌드한 linux/amd64 이미지를 먼저 전달해야 합니다.
 

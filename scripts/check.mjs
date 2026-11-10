@@ -38,6 +38,7 @@ const env = {
   AI_GEMINI_INPUT_USD_PER_MILLION: '3',
   AI_GEMINI_OUTPUT_USD_PER_MILLION: '4',
   PRODUCTION_DOMAIN: 'app.example.test',
+  ADMIN_DOMAIN: 'admin.example.test',
   DEVELOPMENT_API_DOMAIN: 'dev-api.example.test',
   API_IMAGE: 'example/api:validation',
   WEB_IMAGE: 'example/web:validation',
@@ -204,7 +205,13 @@ assert.equal(shared.services.gateway.ports[0].target, 80);
 const caddyfile = readFileSync('Caddyfile', 'utf8');
 assert.ok(caddyfile.includes('http://{$PRODUCTION_DOMAIN}'));
 assert.ok(caddyfile.includes('http://{$DEVELOPMENT_API_DOMAIN}'));
-assert.equal(caddyfile.match(/header_up X-Forwarded-Proto https/g)?.length, 4);
+assert.equal(caddyfile.match(/header_up X-Forwarded-Proto https/g)?.length, 5);
+assert.ok(caddyfile.includes('http://{$ADMIN_DOMAIN}'));
+assert.ok(caddyfile.includes('redir /admin https://{$ADMIN_DOMAIN}/ 308'));
+assert.equal(
+  shared.services.gateway.environment.ADMIN_DOMAIN,
+  env.ADMIN_DOMAIN
+);
 assert.ok(caddyfile.includes('reverse_proxy production-admin:3001'));
 assert.ok(deployScript.includes('--without-worker'));
 assert.equal(deployments[1].services.admin.image, env.ADMIN_IMAGE);

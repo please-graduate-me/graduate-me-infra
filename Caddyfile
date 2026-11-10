@@ -3,17 +3,37 @@ http://{$PRODUCTION_DOMAIN} {
 	handle @api {
 		reverse_proxy production-api:4000 {
 			# 공개 HTTPS는 Cloudflare가 종료하고 Tunnel 내부는 HTTP를 사용한다.
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
 			header_up X-Forwarded-Proto https
 		}
 	}
-	redir /admin /admin/ 308
+	redir /admin https://{$ADMIN_DOMAIN}/ 308
 	handle_path /admin/* {
-		reverse_proxy production-admin:3001 {
+		redir https://{$ADMIN_DOMAIN}{uri} 308
+	}
+	handle {
+		reverse_proxy production-web:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto https
+		}
+	}
+}
+
+http://{$ADMIN_DOMAIN} {
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy production-api:4000 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
 			header_up X-Forwarded-Proto https
 		}
 	}
 	handle {
-		reverse_proxy production-web:3000 {
+		reverse_proxy production-admin:3001 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
 			header_up X-Forwarded-Proto https
 		}
 	}
@@ -21,6 +41,8 @@ http://{$PRODUCTION_DOMAIN} {
 
 http://{$DEVELOPMENT_API_DOMAIN} {
 	reverse_proxy development-api:4000 {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
 		header_up X-Forwarded-Proto https
 	}
 }
