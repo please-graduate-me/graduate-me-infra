@@ -45,7 +45,7 @@ pnpm dev:logs
 pnpm dev:down
 ```
 
-사용자 웹은 `http://localhost:3000`, 관리자 웹은 `http://localhost:3001`, API는 `http://localhost:4000`입니다. DB 포트는 로컬의 `15432`입니다. 이 포트들은 모두 `127.0.0.1`에만 연결합니다.
+사용자 웹은 `http://localhost:3000`, 관리자 웹은 `http://localhost:3001`, API는 `http://localhost:4000`입니다. 관리자 포트가 사용 중이면 `.env`의 `ADMIN_PORT`를 다른 값으로 바꿉니다. DB 포트는 로컬의 `15432`입니다. 이 포트들은 모두 `127.0.0.1`에만 연결합니다.
 
 기존 개별 Compose에서 전환할 때는 해당 파일 감시와 컨테이너를 먼저 종료합니다. 각 앱 폴더의 `docker compose -f compose.yaml -f compose.dev.yaml down`을 사용합니다. 볼륨 삭제 옵션은 사용하지 않습니다.
 

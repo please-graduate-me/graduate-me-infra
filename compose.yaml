@@ -133,7 +133,7 @@ services:
     environment:
       API_INTERNAL_URL: http://api:4000
     ports:
-      - 127.0.0.1:3001:3001
+      - '127.0.0.1:${ADMIN_PORT:-3001}:3001'
     healthcheck:
       test:
         - CMD

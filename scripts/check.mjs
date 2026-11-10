@@ -10,6 +10,7 @@ const env = {
   OCR_PROVIDER: '',
   VIDEO_TRANSCRIPTION_PROVIDER: '',
   DB_PASSWORD: 'validation_only_password',
+  ADMIN_PORT: '3002',
   AUTH_URL: 'https://app.example.test',
   AUTH_SECRET: 'validation_only_secret_0123456789',
   AUTH_GOOGLE_ID: 'validation_only_id',
@@ -84,7 +85,7 @@ assert.equal(
 assert.equal(local.services.admin.environment.GEMINI_API_KEY, undefined);
 assert.equal(local.services.admin.depends_on.api.condition, 'service_healthy');
 assert.equal(local.services.admin.ports[0].host_ip, '127.0.0.1');
-assert.equal(local.services.admin.ports[0].published, '3001');
+assert.equal(local.services.admin.ports[0].published, env.ADMIN_PORT);
 assert.equal(local.services.admin.ports[0].target, 3001);
 assert.equal(
   local.services.api.environment.ADMIN_URL,
