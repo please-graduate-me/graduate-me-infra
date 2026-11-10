@@ -10,14 +10,20 @@ esac
 demo=0
 local_images=0
 without_worker=0
+web_only=0
 for option in "${@:2}"; do
   case "$option" in
     --without-worker) without_worker=1 ;;
+    --web-only) web_only=1 ;;
     --demo) demo=1 ;;
     --local-images) local_images=1 ;;
     *) echo "지원하지 않는 옵션: $option" >&2; exit 1 ;;
   esac
 done
+if [[ "$web_only" == 1 && ( "$stage" != production || "$demo" == 1 ) ]]; then
+  echo '학생 화면 단독 배포는 production에서만 사용하며 체험 배포와 함께 실행하지 않습니다.' >&2
+  exit 1
+fi
 if [[ "$demo" == 1 && "$stage" == development ]]; then
   echo '체험 배포는 shared와 production에만 사용합니다.' >&2
   exit 1
@@ -40,6 +46,27 @@ fi
 # 설정 파일을 실행하지 않고 Compose의 환경변수 파서로만 읽는다.
 compose=(docker compose --env-file "$image_file" --env-file "$secret_file" -f "compose.$stage.yaml")
 "${compose[@]}" config --quiet
+if [[ "$web_only" == 1 ]]; then
+  api_container="$("${compose[@]}" ps -q api)"
+  if [[ -z "$api_container" ]]; then
+    echo 'API가 실행 중이어야 학생 화면만 배포할 수 있습니다.' >&2
+    exit 1
+  fi
+  desired_api_hash="$("${compose[@]}" config --hash api | awk '$1 == "api" { print $2 }')"
+  running_api_hash="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.config-hash"}}' "$api_container")"
+  api_health="$(docker inspect --format '{{.State.Health.Status}}' "$api_container")"
+  # API 이미지나 비밀 설정이 달라진 배포를 화면 단독 갱신으로 오인하지 않게 한다.
+  if [[ -z "$desired_api_hash" || "$running_api_hash" != "$desired_api_hash" || "$api_health" != healthy ]]; then
+    echo 'API 설정 변경 또는 비정상 상태가 있습니다. 일반 배포 경로를 먼저 사용해 주세요.' >&2
+    exit 1
+  fi
+  if [[ "$local_images" == 0 ]]; then "${compose[@]}" pull web; fi
+  if [[ "$without_worker" == 1 ]]; then "${compose[@]}" stop worker; fi
+  # DB와 API를 유지해 학생 스타일 변경 중 기존 학습 요청을 끊지 않는다.
+  "${compose[@]}" up -d --no-deps --wait --wait-timeout 180 web
+  "${compose[@]}" ps web
+  exit 0
+fi
 if [[ "$local_images" == 0 ]]; then
   "${compose[@]}" pull
 fi
