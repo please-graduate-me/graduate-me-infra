@@ -28,7 +28,7 @@ codding/
 └── graduate-me-backend/
 ```
 
-Node.js 22, pnpm 10.33.0, Docker Compose가 필요합니다. 기존 저장소의 코드를 직접 참조하는 곳은 Docker 빌드 컨텍스트와 소스 감시뿐입니다.
+Node.js 22, pnpm 10.33.0, Docker Compose가 필요합니다. Compose는 CI와 동일한 `v5.1.0`으로 검증했습니다. 기존 저장소의 코드를 직접 참조하는 곳은 Docker 빌드 컨텍스트와 소스 감시뿐입니다.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -138,6 +138,8 @@ pnpm check:ci
 ```
 
 포맷과 ESLint 외에 모든 Compose를 실제 Docker Compose로 해석해 서비스 구성, 개발·운영 DB와 네트워크 분리, 공개 포트 제한, 홈서버의 소스 빌드 금지, 비밀값이 없는 예시를 검사합니다. 검사는 DB를 시작하거나 실제 서비스를 변경하지 않습니다. Caddy 설정 변경 시 `caddy validate`도 수행합니다.
+
+CI는 runner 기본 설치 버전에 의존하지 않고 Docker Compose `v5.1.0`을 설치하며, 사용 버전을 로그에 남깁니다. `compose.local.yaml`의 `develop.watch.initial_sync`를 지원하지 않는 버전에서는 `additional properties 'initial_sync' not allowed` 오류로 검사가 실패합니다. 같은 오류가 발생하면 `docker compose version`을 확인하고 CI와 동일한 버전으로 맞춥니다.
 
 참고: [Compose 운영 구성](https://docs.docker.com/compose/how-tos/production/), [Compose 환경변수 파일](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/), [Caddy 환경변수](https://caddyserver.com/docs/caddyfile/concepts), [GitHub self-hosted runner](https://docs.github.com/en/actions/reference/runners/self-hosted-runners).
 
