@@ -155,10 +155,9 @@ API 서버와 worker는 같은 백엔드 저장소의 서로 다른 프로세스
 
 운영 관리자 앱은 `https://admin.pleasegraduate.me/`에서 제공합니다. `production.env`의 `ADMIN_APP_URL`에도 이 주소를 지정하고 `shared.env`의 `ADMIN_DOMAIN=admin.pleasegraduate.me`를 설정합니다. 관리자 이미지는 `docker build --platform linux/amd64 --build-arg ADMIN_BASE_PATH=/ --build-arg VITE_STUDENT_URL=https://pleasegraduate.me`로 빌드합니다. 학생 도메인의 기존 `/admin`과 `/admin/*` 주소는 관리자 호스트의 대응 경로로 리디렉션합니다.
 
-Cloudflare Tunnel의 관리자 Published application route는 서비스 `HTTP`, URL `127.0.0.1:8080`으로 연결하고 HTTP Host Header는 덮어쓰지 않습니다. Caddy가 호스트로 학생·관리자를 분기하며 각 호스트의 `/api`는 같은 운영 API에 전달합니다. 백엔드는 등록한 학생·관리자 호스트에서 각각 OAuth를 완료하고 host-only 세션 쿠키를 사용합니다. 학생 로그인과 관리자 로그인은 호스트별로 수행하며 상위 도메인 쿠키로 공유하지 않습니다. Google OAuth의 승인된 리디렉션 URI에는 학생·관리자 콜백을 모두 등록합니다. 기존 학생 콜백은 유지합니다.
+Cloudflare Tunnel의 관리자 Published application route는 서비스 `HTTP`, URL `127.0.0.1:8080`으로 연결하고 HTTP Host Header는 덮어쓰지 않습니다. Caddy가 호스트로 학생·관리자를 분기하며 각 호스트의 `/api`는 같은 운영 API에 전달합니다. 사용자 웹은 Google OAuth를 사용하고 운영 콘솔은 독립 아이디·비밀번호 세션을 사용합니다. Google OAuth에는 사용자 웹 콜백만 등록합니다. 운영 콘솔은 아래 운영자 인증 변경 절을 따릅니다.
 
 - `https://pleasegraduate.me/api/auth/callback/google`
-- `https://admin.pleasegraduate.me/api/auth/callback/google`
 
 일반 로그인과 모든 앱을 포함하되 worker를 실행하지 않을 때는 `bash scripts/deploy.sh production --without-worker --local-images`를 사용합니다. 이 경로는 DB 백업, 마이그레이션, API·학생·관리자 서비스 기동과 상태 확인을 수행합니다. 기존 worker도 먼저 중지합니다. 외부에서 빌드한 linux/amd64 이미지를 먼저 전달해야 합니다.
 
@@ -169,3 +168,11 @@ MVP 비밀 설정에는 `MATERIAL_POLICY_PROFILE=mvp`, `AI_PROVIDER=anthropic`, 
 운영 API의 요청 로그는 `ssh jaejoon-server 'docker logs -f --tail 100 graduate-me-production-api-1'`로 조회합니다. 각 완료 요청은 한국 시각(`+09:00`)·서버 요청 ID·HTTP 메서드·라우트 패턴·상태·소요 시간·안전한 오류 코드만 기록합니다. 원문·요청 본문·쿼리·쿠키·키·IP는 API 요청 로그에 기록하지 않습니다. 관리자 `/usage`는 AI 실행 원장과 영상 처리 이력이며 전체 HTTP 로그 화면과 구분합니다.
 
 API 이미지·설정·계약을 바꾸지 않는 학생 화면 수정은 `bash scripts/deploy.sh production --web-only --without-worker --local-images`로 배포할 수 있습니다. 이 경로는 실행 중 API가 healthy이고 구성 해시가 일치하는지 먼저 검사하고 학생 컨테이너만 갱신합니다. DB 백업·마이그레이션·API 중단은 수행하지 않으며 worker도 시작하지 않습니다. API 설정이나 스키마를 바꿀 때는 기존 일반 배포의 백업·마이그레이션 순서를 사용합니다.
+
+## 운영자 인증 변경
+
+운영 콘솔은 Google 로그인 대신 `ADMIN_LOGIN_ID`와 `ADMIN_PASSWORD_HASH`를 사용합니다. 기존 `ADMIN_EMAILS`는 운영 권한을 부여하지 않습니다. 사용자 웹의 Google 인증 설정은 유지합니다. 관리자 호스트의 Google 콜백 등록은 더 이상 필요하지 않습니다.
+
+백엔드 저장소에서 `pnpm admin:password`로 해시를 생성하고, 통합 로컬 `.env` 또는 환경별 비밀 파일에 아이디와 해시를 설정합니다. 해시는 `$` 확장을 피하도록 작은따옴표로 감쌉니다. 실제 값은 Git에 기록하지 않습니다. 아이디·해시 변경은 기존 운영 세션을 무효화합니다.
+
+조교는 사용자 웹의 프로필 타이틀과 커뮤니티 태그 기능을 사용합니다. 관리자 콘솔의 조교 메뉴는 이 자격만 부여·회수합니다. 수업 관리도 사용자 웹에서 수행하며 기존 비공개 질문은 공개 게시글로 자동 전환하지 않습니다.
