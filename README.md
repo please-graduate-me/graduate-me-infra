@@ -152,14 +152,24 @@ SSH 키는 `restrict`와 강제 명령을 사용합니다. 앱 키는 자기 앱
 
 Tailscale 관리자의 Trust credentials에서 GitHub Actions용 OIDC 연동을 저장소별로 만듭니다. 긴 수명의 Tailscale 비밀키를 저장하는 대신 GitHub가 실행마다 발급하는 OIDC 토큰으로 접속합니다. 발급 권한은 `Auth Keys: Write`, 태그는 `tag:graduate-me-ci`입니다.
 
-Issuer는 `https://token.actions.githubusercontent.com`이며 Subject는 아래와 같이 `main`만 허용합니다. 관리자 화면에서 발급된 Client ID와 Audience를 각각 해당 저장소의 `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE`에 등록합니다.
+Issuer는 `https://token.actions.githubusercontent.com`이며 Subject는 아래와 같이 `main`만 허용합니다. 네 저장소는 GitHub의 `use_immutable_subject=true` 설정을 사용하므로 조직·저장소 이름 뒤의 숫자 ID까지 포함해야 합니다. 이름만 넣은 이전 형식은 `Cannot validate subject`와 403 오류로 거절됩니다. 관리자 화면에서 발급된 Client ID와 Audience를 각각 해당 저장소의 `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE`에 등록합니다.
 
-| 저장소 | Subject                                                            |
-| ------ | ------------------------------------------------------------------ |
-| 프론트 | `repo:please-graduate-me/graduate-me-frontend:ref:refs/heads/main` |
-| 백엔드 | `repo:please-graduate-me/graduate-me-backend:ref:refs/heads/main`  |
-| 관리자 | `repo:please-graduate-me/graduate-me-admin:ref:refs/heads/main`    |
-| infra  | `repo:please-graduate-me/graduate-me-infra:ref:refs/heads/main`    |
+| 저장소 | Subject |
+| --- | --- |
+| 프론트 | `repo:please-graduate-me@351951192/graduate-me-frontend@1446594643:ref:refs/heads/main` |
+| 백엔드 | `repo:please-graduate-me@351951192/graduate-me-backend@1446594895:ref:refs/heads/main` |
+| 관리자 | `repo:please-graduate-me@351951192/graduate-me-admin@1450227319:ref:refs/heads/main` |
+| infra | `repo:please-graduate-me@351951192/graduate-me-infra@1446623300:ref:refs/heads/main` |
+
+숫자 ID나 Subject 형식을 추측하지 않고 다음처럼 저장소의 실제 설정을 조회합니다.
+
+```sh
+# 실제 Subject 앞부분에 main 브랜치 조건을 붙여 확인한다.
+gh api repos/please-graduate-me/graduate-me-infra/actions/oidc/customization/sub \
+  --jq '.sub_claim_prefix + ":ref:refs/heads/main"'
+```
+
+Tailscale의 인증 상세 화면에 표시되는 `Received ... from issuer`는 실제 받은 Subject입니다. 등록값과 일치하는지 확인합니다. Subject를 수정해 저장해도 지난 오류 표시는 다음 인증이 성공할 때까지 남습니다. 기존 인증의 Subject만 수정하면 Client ID와 Audience는 유지되므로 GitHub Secrets를 다시 등록하지 않습니다.
 
 Tailscale 접근 정책에는 아래 항목을 기존 정책에 병합합니다. 전체 정책을 이 예시로 덮어쓰지 않습니다. 이 권한은 임시 runner가 홈서버 OpenSSH의 TCP 22번 포트로 접속하게 하며, Linux 로그인은 배포 전용 SSH 키가 담당합니다. Tailscale SSH 기능을 별도로 활성화할 필요는 없습니다.
 
