@@ -1,0 +1,93 @@
+name: 앱 이미지 생성과 홈서버 배포
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: 배포할 Compose 서비스
+        required: true
+        type: string
+    secrets:
+      TS_OAUTH_CLIENT_ID:
+        required: true
+      TS_AUDIENCE:
+        required: true
+      DEPLOY_SSH_KEY:
+        required: true
+      DEPLOY_KNOWN_HOSTS:
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      SERVICE: ${{ inputs.service }}
+      REVISION: ${{ github.sha }}
+    steps:
+      - name: 배포할 앱 코드 받기
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 배포 대상과 연결 설정 확인
+        run: |
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER"
+          case "$GITHUB_REPOSITORY:$SERVICE" in
+            please-graduate-me/graduate-me-frontend:web) ;;
+            please-graduate-me/graduate-me-backend:api) ;;
+            please-graduate-me/graduate-me-admin:admin) ;;
+            *) echo '저장소와 배포 대상이 일치하지 않습니다.' >&2; exit 1 ;;
+          esac
+      - name: 홈서버에서 실행할 이미지 만들기
+        run: |
+          case "$SERVICE" in
+            web) image="graduate-me-frontend:$REVISION"; args=(--build-arg API_INTERNAL_URL=http://production-api:4000) ;;
+            api) image="graduate-me-backend:$REVISION"; args=() ;;
+            admin) image="graduate-me-admin:$REVISION"; args=(--build-arg ADMIN_BASE_PATH=/ --build-arg VITE_STUDENT_URL=https://pleasegraduate.me) ;;
+          esac
+          # 이미지는 GitHub에서 빌드하며 홈서버에서는 소스를 빌드하지 않는다.
+          docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$REVISION" --tag "$image" "${args[@]}" .
+          docker save "$image" | gzip -1 > "$RUNNER_TEMP/app-image.tar.gz"
+      - name: 더 최신 merge가 있는지 확인
+        id: current
+        run: |
+          latest="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$latest" == "$REVISION" ]]; then echo 'deploy=true' >> "$GITHUB_OUTPUT"; fi
+      - name: 배포 전용 SSH 인증 준비
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+      - name: 배포할 때만 Tailscale 연결
+        if: steps.current.outputs.deploy == 'true'
+        id: tailscale
+        uses: tailscale/github-action@15aab698c4bc2ba4baecf36031adbc296b594f36
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:graduate-me-ci
+          ping: ${{ vars.DEPLOY_HOST }}
+      - name: 이미지 전송과 해당 앱 교체
+        if: steps.current.outputs.deploy == 'true'
+        run: |
+          # 고정한 서버 키를 확인하며, 이 SSH 키는 자기 앱의 배포 명령만 실행한다.
+          ssh -i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "deploy $REVISION" < "$RUNNER_TEMP/app-image.tar.gz"
+      - name: Tailscale 연결 즉시 해제
+        if: always() && steps.tailscale.outcome == 'success'
+        run: sudo tailscale logout
+      - name: 임시 이미지 묶음과 SSH 키 정리
+        if: always()
+        run: rm -f "$RUNNER_TEMP/app-image.tar.gz" "$HOME/.ssh/deploy_key"

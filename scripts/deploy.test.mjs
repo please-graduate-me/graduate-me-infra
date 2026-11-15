@@ -62,12 +62,12 @@ test('학생 화면 단독 배포는 DB·API·마이그레이션을 건드리지
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     result.commands,
-    /up -d --no-deps --wait --wait-timeout 180 web/
+    /up -d --no-deps --no-build --pull never --wait --wait-timeout 180 web/
   );
   assert.match(result.commands, /stop worker/);
   assert.doesNotMatch(
     result.commands,
-    /stop api|stop web|db:migrate|pg_dump|run --rm|pull|up.*worker/
+    /stop api|stop web|db:migrate|pg_dump|run --rm|\.yaml pull |up.*worker/
   );
 });
 

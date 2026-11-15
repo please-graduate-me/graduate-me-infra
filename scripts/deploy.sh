@@ -11,15 +11,25 @@ demo=0
 local_images=0
 without_worker=0
 web_only=0
-for option in "${@:2}"; do
+service=''
+shift
+while [[ "$#" -gt 0 ]]; do
+  option="$1"
   case "$option" in
     --without-worker) without_worker=1 ;;
     --web-only) web_only=1 ;;
     --demo) demo=1 ;;
     --local-images) local_images=1 ;;
+    --service) service="${2:?배포할 앱을 지정하세요}"; shift ;;
     *) echo "지원하지 않는 옵션: $option" >&2; exit 1 ;;
   esac
+  shift
 done
+case "$service" in ''|web|admin|api) ;; *) echo '지원하지 않는 앱입니다.' >&2; exit 1 ;; esac
+if [[ -n "$service" && ( "$stage" != production || "$demo" == 1 || "$web_only" == 1 ) ]]; then
+  echo '앱별 배포는 production에서만 사용하며 다른 배포 모드와 함께 실행하지 않습니다.' >&2
+  exit 1
+fi
 if [[ "$web_only" == 1 && ( "$stage" != production || "$demo" == 1 ) ]]; then
   echo '학생 화면 단독 배포는 production에서만 사용하며 체험 배포와 함께 실행하지 않습니다.' >&2
   exit 1
@@ -31,9 +41,13 @@ fi
 
 infra_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$infra_root"
+source "$infra_root/scripts/deployment-common.sh"
+if [[ -n "${GRADUATE_ME_DEPLOY_ROOT:-}" ]]; then
+  lock_deployment "$GRADUATE_ME_DEPLOY_ROOT"
+fi
 : "${GRADUATE_ME_ENV_DIR:?홈서버의 비밀 설정 디렉터리를 지정하세요}"
 secret_file="$GRADUATE_ME_ENV_DIR/$stage.env"
-image_file="$infra_root/images/$stage.env"
+image_file="${GRADUATE_ME_IMAGE_FILE:-$infra_root/images/$stage.env}"
 if [[ ! -f "$secret_file" ]]; then
   echo "환경 설정 파일이 없습니다: $secret_file" >&2
   exit 1
@@ -46,7 +60,8 @@ fi
 # 설정 파일을 실행하지 않고 Compose의 환경변수 파서로만 읽는다.
 compose=(docker compose --env-file "$image_file" --env-file "$secret_file" -f "compose.$stage.yaml")
 "${compose[@]}" config --quiet
-if [[ "$web_only" == 1 ]]; then
+if [[ "$web_only" == 1 || "$service" == web || "$service" == admin ]]; then
+  target_service="${service:-web}"
   api_container="$("${compose[@]}" ps -q api)"
   if [[ -z "$api_container" ]]; then
     echo 'API가 실행 중이어야 학생 화면만 배포할 수 있습니다.' >&2
@@ -60,15 +75,15 @@ if [[ "$web_only" == 1 ]]; then
     echo 'API 설정 변경 또는 비정상 상태가 있습니다. 일반 배포 경로를 먼저 사용해 주세요.' >&2
     exit 1
   fi
-  if [[ "$local_images" == 0 ]]; then "${compose[@]}" pull web; fi
-  if [[ "$without_worker" == 1 ]]; then "${compose[@]}" stop worker; fi
+  if [[ "$local_images" == 0 ]]; then "${compose[@]}" pull "$target_service"; fi
+  if [[ "$web_only" == 1 && "$without_worker" == 1 ]]; then "${compose[@]}" stop worker; fi
   # DB와 API를 유지해 학생 스타일 변경 중 기존 학습 요청을 끊지 않는다.
-  "${compose[@]}" up -d --no-deps --wait --wait-timeout 180 web
-  "${compose[@]}" ps web
+  "${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 "$target_service"
+  "${compose[@]}" ps "$target_service"
   exit 0
 fi
 if [[ "$local_images" == 0 ]]; then
-  "${compose[@]}" pull
+  if [[ "$service" == api ]]; then "${compose[@]}" pull api; else "${compose[@]}" pull; fi
 fi
 
 if [[ "$stage" != shared ]]; then
@@ -76,17 +91,24 @@ if [[ "$stage" != shared ]]; then
   docker network inspect "${networks[@]}" >/dev/null
   "${compose[@]}" up -d --wait db
   services=(worker api)
-  if [[ "$stage" == production ]]; then services+=(web admin); fi
+  if [[ "$stage" == production && "$service" != api ]]; then services+=(web admin); fi
   # 이전 앱이 변경 중인 스키마를 사용하지 않도록 잠시 중단한다.
   "${compose[@]}" stop "${services[@]}"
   backup_dir="${GRADUATE_ME_BACKUP_DIR:-$GRADUATE_ME_ENV_DIR/backups}"
   mkdir -p "$backup_dir"
   chmod 700 "$backup_dir"
-  backup_file="$backup_dir/$stage-$(date -u +%Y%m%dT%H%M%SZ).dump"
+  backup_file="$(mktemp "$backup_dir/$stage-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
   umask 077
   "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_file"
   test -s "$backup_file"
   "${compose[@]}" run --rm --no-deps api pnpm db:migrate
+fi
+
+if [[ "$service" == api ]]; then
+  # 프론트와 관리자 컨테이너를 유지하고 API와 DB 변경만 반영한다.
+  "${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 api
+  "${compose[@]}" ps api
+  exit 0
 fi
 
 case "$stage" in

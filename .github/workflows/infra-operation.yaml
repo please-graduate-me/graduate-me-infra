@@ -1,0 +1,89 @@
+name: infra 파일 수신 또는 수동 적용
+
+on:
+  workflow_call:
+    inputs:
+      operation:
+        required: true
+        type: string
+      revision:
+        required: true
+        type: string
+      target:
+        type: string
+        default: production
+    secrets:
+      TS_OAUTH_CLIENT_ID:
+        required: true
+      TS_AUDIENCE:
+        required: true
+      DEPLOY_SSH_KEY:
+        required: true
+      DEPLOY_KNOWN_HOSTS:
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  operation:
+    if: github.repository == 'please-graduate-me/graduate-me-infra' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      OPERATION: ${{ inputs.operation }}
+      REVISION: ${{ inputs.revision }}
+      TARGET: ${{ inputs.target }}
+    steps:
+      - name: 검사한 infra 커밋 받기
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+      - name: 작업과 버전 확인
+        run: |
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER"
+          [[ "$REVISION" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$REVISION" ]]
+          case "$OPERATION" in sync|apply) ;; *) exit 1 ;; esac
+          case "$TARGET" in production|development|shared) ;; *) exit 1 ;; esac
+      - name: 운영 설정 파일만 묶기
+        if: inputs.operation == 'sync'
+        run: |
+          # 이미지 버전 예시는 묶되 홈서버의 실제 배포 기록을 덮어쓰지 않는다.
+          git archive HEAD compose.production.yaml compose.development.yaml compose.shared.yaml Caddyfile scripts images | gzip -1 > "$RUNNER_TEMP/infra.tar.gz"
+      - name: 배포 전용 SSH 인증 준비
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+      - name: Tailscale 연결
+        id: tailscale
+        uses: tailscale/github-action@15aab698c4bc2ba4baecf36031adbc296b594f36
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:graduate-me-ci
+          ping: ${{ vars.DEPLOY_HOST }}
+      - name: 선택한 infra 작업 실행
+        run: |
+          ssh_options=(-i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+          if [[ "$OPERATION" == sync ]]; then
+            # 파일 수신은 active 링크와 실행 중 컨테이너를 바꾸지 않는다.
+            ssh "${ssh_options[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "sync $REVISION" < "$RUNNER_TEMP/infra.tar.gz"
+          else
+            ssh "${ssh_options[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "apply $TARGET $REVISION"
+          fi
+      - name: Tailscale 연결 즉시 해제
+        if: always() && steps.tailscale.outcome == 'success'
+        run: sudo tailscale logout
+      - name: 임시 묶음과 SSH 키 정리
+        if: always()
+        run: rm -f "$RUNNER_TEMP/infra.tar.gz" "$HOME/.ssh/deploy_key"

@@ -11,10 +11,12 @@
 | `compose.production.yaml` | 홈서버의 학생·관리자 앱, API, worker, 운영 PostgreSQL |
 | `compose.shared.yaml` | 공용 Caddy와 환경별 진입 네트워크 |
 | `Caddyfile` | Tunnel 내부 HTTP 요청을 운영 웹과 개발 API로 전달 |
-| `images/*.env` | 실제 배포할 이미지 버전 기록, 비밀값 없음 |
+| `images/*.env` | 최초 설치용 이미지 버전, 운영 배포 기록은 홈서버 `state/images/*.env`에 보관 |
 | `env/*.env.example` | 환경별 비밀 설정의 빈 양식 |
 | `.github/workflows/check.yaml` | GitHub 제공 runner에서 인프라 구성 검사 |
-| `.github/workflows/deploy.yaml` | 홈서버 전용 runner에서 선택한 환경 수동 배포 |
+| `.github/workflows/deploy.yaml` | GitHub 제공 runner에서 수신한 infra 버전을 환경별로 수동 적용 |
+| `.github/workflows/deploy-app.yaml` | 각 앱의 검사가 통과한 후 호출하는 이미지 빌드·전송·앱별 배포 절차 |
+| `.github/workflows/infra-operation.yaml` | Tailscale·SSH를 통한 infra 수신과 수동 적용 |
 
 `development`는 팀원이 사용하는 홈서버의 개발 API입니다. 개인 PC에서 전체 스택을 실행하는 `local`과 다릅니다. 운영 프론트만 홈서버에 두고, 프론트 개발자는 로컬 개발 서버를 사용합니다.
 
@@ -75,42 +77,116 @@ Naver로 전환할 때는 `CLOVA_STUDIO_API_KEY`, `CLOVA_TEXT_MODEL=HCX-007`, `C
 
 초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 1GiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
 
-## 홈서버 설정과 최초 배포
+## 앱별 자동 배포
 
-홈서버 SSH 주소는 `jaejoon-server`, 학생 운영 도메인은 `pleasegraduate.me`, 관리자 도메인은 `admin.pleasegraduate.me`, 개발 API 도메인은 `dev-api.pleasegraduate.me`입니다. 실제 이미지 버전과 배포 runner는 별도로 준비해야 합니다. `configure-me` 이미지 값이 남아 있으면 배포 스크립트가 중단됩니다. 이 저장소를 만드는 것만으로 운영 서비스가 배포되지는 않습니다.
+각 앱의 `main`에 push하거나 merge하면 해당 저장소의 GitHub Actions가 포맷·린트·타입·테스트·빌드를 검사합니다. 백엔드 CI는 `_test`로 끝나는 별도 PostgreSQL DB에 마이그레이션을 적용하고 DB 통합 테스트도 실행합니다. PR에서는 검사만 수행하며 홈서버와 연결하지 않습니다.
 
-1. Cloudflare에서 도메인을 활성화하고 `graduate-me` Tunnel을 생성합니다. 홈서버에 Linux amd64용 cloudflared를 서비스로 설치합니다. Published application route에서 `pleasegraduate.me`, `admin.pleasegraduate.me`, `dev-api.pleasegraduate.me`를 각각 `http://127.0.0.1:8080`에 연결합니다. Caddy의 호스트별 분기를 위해 HTTP Host Header를 별도 주소로 덮어쓰지 않습니다. Tunnel이 DNS 레코드를 만들므로 홈서버 공인 IP를 가리키는 A 레코드는 필요하지 않습니다. 토큰은 서버에서만 사용하고 Git에 넣지 않습니다.
-2. 홈서버에 저장소 밖의 비밀 설정 디렉터리를 만들고 접근 권한을 제한합니다. `env/shared.env.example`, `env/development.env.example`, `env/production.env.example`을 각각 `shared.env`, `development.env`, `production.env`로 복사해 채웁니다.
-3. DB 비밀번호와 AUTH_SECRET은 환경별로 `openssl rand -hex 32`로 생성합니다. DB 비밀번호는 연결 URL에서 사용하므로 이 형식을 유지합니다. OAuth 클라이언트도 환경별로 나눕니다. 초기화 후 DB 비밀번호 변경은 PostgreSQL 계정 변경 절차가 별도로 필요합니다.
-4. GitHub 이미지 빌드에서 생성한 실제 커밋 태그나 digest를 `images/*.env`에 기록하고 커밋합니다. 백엔드 이미지 하나를 API와 worker가 서로 다른 시작 명령으로 사용합니다.
-5. runner를 실행할 사용자로 GHCR 읽기 인증을 설정합니다. 인증 정보는 Git에 넣지 않습니다.
-6. `GRADUATE_ME_ENV_DIR`에 비밀 설정 디렉터리의 절대 경로를 지정하고 아래 순서로 배포합니다.
+검사가 통과한 `main`은 이 저장소의 재사용 workflow `deploy-app.yaml`을 호출합니다. 앱 소스와 Dockerfile은 해당 앱 저장소에서 받고, GitHub의 일반 Ubuntu runner에서 `linux/amd64` 이미지를 빌드합니다. 전체 앱 커밋 SHA를 이미지 태그와 revision label에 기록합니다. 학생 웹은 Next.js 빌드에 반영되는 프록시 주소도 `http://production-api:4000`으로 지정합니다.
 
-```sh
-export GRADUATE_ME_ENV_DIR=/실제/비밀설정/경로
-bash scripts/deploy.sh shared
-bash scripts/deploy.sh development
-bash scripts/deploy.sh production
+이미지를 압축한 뒤에 Tailscale에 임시로 연결하고, SSH로 홈서버에 전달합니다. 이미지 저장소와 홈서버 self-hosted runner는 사용하지 않습니다. 전송받은 이미지의 압축·플랫폼·revision label을 확인하고 운영에 적용한 Compose로 해당 앱만 교체합니다. 마지막 상태 확인까지 성공해야 홈서버의 이미지 버전 기록을 갱신합니다. 작업 후 Tailscale에서 즉시 로그아웃하며 GitHub 임시 묶음과 키 파일을 지웁니다.
+
+| 저장소 | 배포 대상 | 다른 앱에 미치는 영향 |
+| --- | --- | --- |
+| `graduate-me-frontend` | `web` | API·DB·관리자·worker 유지 |
+| `graduate-me-admin` | `admin` | API·DB·학생 웹·worker 유지 |
+| `graduate-me-backend` | `api` | worker 중지, DB 백업·마이그레이션 후 API 교체, 학생 웹·관리자 컨테이너 유지 |
+
+백엔드 교체 중 API 요청에는 짧은 중단이 생깁니다. 앱 간 API 계약과 스키마는 배포 순서에 맞게 호환해야 합니다. 마이그레이션이나 상태 확인이 실패하면 workflow가 실패하며 성공 버전 기록은 유지합니다. 컨테이너와 DB 변경을 자동으로 되돌리지는 않습니다. 마이그레이션 실패 시 API는 중지된 상태일 수 있으므로 백업과 로그를 확인합니다.
+
+서로 다른 앱 저장소의 GitHub concurrency는 서로 묶이지 않습니다. 홈서버의 `state/deploy.lock`을 `flock`으로 잡아 이미지 수신·앱 배포·infra 적용을 순서대로 실행합니다. 학생·관리자 배포는 운영 API가 healthy이고 설정 해시가 일치하는지도 먼저 확인합니다. 자동 배포와 infra 수동 적용은 worker를 시작하지 않습니다.
+
+## infra 수신과 운영 적용
+
+infra `main`의 검사가 통과하면 새 버전을 `releases/<infra SHA>/`에 받아두고 `pending` 링크만 바꿉니다. 수신 작업은 컨테이너와 운영 설정 링크, 실제 이미지 버전 기록을 변경하지 않습니다. 앱 배포는 항상 `active-production`의 설정과 스크립트를 사용하므로 대기 중인 Compose 변경이 앱 배포에 섞이지 않습니다.
+
+```text
+~/graduate-me-infra/
+├── releases/<infra SHA>/       # 수신한 버전별 Compose·Caddyfile·배포 스크립트
+├── pending                    # 최근 수신 버전
+├── active-production          # 운영 앱 배포에 사용하는 infra 버전
+├── active-development         # 수동 적용한 개발 환경 버전
+├── active-shared              # 수동 적용한 Caddy 구성 버전
+├── control                    # SSH 명령을 처리하는 적용된 제어 스크립트 버전
+├── bin/ssh-command            # SSH 키에 연결하는 고정 진입점
+└── state/
+    ├── images/*.env           # 홈서버의 마지막 성공 이미지 버전
+    └── deploy.lock            # 저장소를 가로질러 공유하는 배포 잠금
 ```
 
-비밀 설정 파일에는 해당 예시의 키만 넣습니다. 이미지 버전은 `images/*.env`에서 관리합니다. 운영 `AUTH_URL`은 `https://pleasegraduate.me`로 설정합니다. Google OAuth 리디렉션 URI는 `https://pleasegraduate.me/api/auth/callback/google`로 등록합니다. 운영 프론트는 내부 운영 API만 사용합니다.
+GitHub Actions의 **수신한 infra 설정 수동 적용**에서 `main`, 적용할 환경, 이미 수신한 전체 infra SHA 40자리를 선택합니다. `production`은 DB 백업·마이그레이션 후 API·학생·관리자를 새 구성으로 시작합니다. `shared`는 Caddy 구성을 반영하며 `development`는 개발 API 구성을 반영합니다. 지정한 환경의 배포가 성공해야 해당 `active-*` 링크를 교체합니다. 운영 적용이 성공하면 SSH 제어 스크립트의 `control`도 그 버전으로 전환합니다.
 
-배포 스크립트는 이미지 다운로드, DB 기동, API·worker 및 운영 웹 중단, DB 백업, 마이그레이션, 서비스 시작과 상태 확인을 순서대로 수행합니다. 짧은 중단 시간이 있으며 무중단 배포를 제공하지 않습니다. 마이그레이션에 실패하면 앱은 중단된 상태로 남겨 원인을 확인하게 합니다. 운영에서 `down -v`를 실행하지 않습니다.
+환경별로 적용하므로 Caddy 변경은 `shared`, 운영 Compose 변경은 `production`에 각각 적용합니다. 아직 적용하지 않은 환경은 기존 버전을 유지합니다. Caddy 설정 파일은 버전별 경로에서 연결하며 적용 시 Caddy를 다시 생성해 이전 파일 마운트가 남지 않게 합니다. 비밀 설정은 Git과 release 디렉터리 밖인 `~/.config/graduate-me/{production,development,shared}.env`에 유지합니다.
 
-백업 위치는 `GRADUATE_ME_BACKUP_DIR`로 지정하며 기본값은 비밀 설정 디렉터리의 `backups`입니다. 정기 백업, 별도 장치로의 복사, 보존 기간과 복원 검증은 실제 운영 전 추가해야 합니다. 이미지 버전을 되돌려도 DB 마이그레이션은 자동으로 되돌아가지 않습니다.
+`images/*.env`는 최초 설치용 기록입니다. 앱 배포 때 Git에 버전 커밋을 만들지 않으며 infra 수신으로 홈서버의 실제 이미지 버전을 덮어쓰지 않습니다. 기존 개발 이미지나 Caddy 이미지의 버전을 바꾸려면 홈서버의 `state/images/<환경>.env`를 명시적으로 수정한 후 해당 환경을 수동 적용합니다. `latest`와 `configure-me`는 배포 스크립트가 거절합니다.
 
-## 운영 데모만 배포
+## 최초 연결 준비
 
-로그인과 신규 영상 처리를 사용하지 않을 때는 Caddy, 운영 프론트, 운영 API와 운영 DB만 실행합니다. 개발 환경, worker는 시작하지 않습니다. 운영 환경변수의 Google OAuth 항목은 비워 둡니다. 데모 자료는 별도로 준비해 DB에 넣으며 배포 과정에서 자동 등록하지 않습니다.
+기존 Cloudflare Tunnel·Caddy·운영 DB·비밀 설정은 유지합니다. 홈서버는 Ubuntu와 Docker Compose, `flock`, `tar`, `gzip`, OpenSSH를 사용하며 Node.js나 pnpm을 호스트에 설치할 필요가 없습니다. GitHub에서는 일반 Ubuntu runner만 사용합니다.
 
-외부 빌드 장비에서 검증한 `linux/amd64` 이미지를 `docker save`와 `docker load`로 서버에 전달한 경우, 이미지 파일에 전달된 이미지의 digest를 기록하고 다음처럼 실행합니다.
+1. 네 저장소의 `pnpm check`와 테스트·빌드를 확인하고 변경을 커밋합니다. 재사용 workflow가 존재하도록 infra를 앱 저장소보다 먼저 push합니다. `DEPLOY_ENABLED`를 등록하기 전에는 자동 배포가 실행되지 않습니다.
+2. 로컬에서 기존 개인 SSH 연결 `ssh jaejoon-server`와 `gh`의 저장소 관리 권한을 확인합니다.
+3. 커밋한 infra 디렉터리에서 `bash scripts/setup-deploy.sh jaejoon-server`를 실행합니다. 이 명령은 네 저장소의 자동 배포를 비활성화한 뒤, 홈서버 디렉터리 준비와 배포 전용 SSH 키 네 개의 등록, GitHub Secrets·Variables 설정, SSH 연결 확인을 수행합니다. 컨테이너를 시작하거나 변경하지 않습니다. 개인 SSH 키는 교체하거나 GitHub에 올리지 않습니다. 재실행하면 이 도구로 만든 배포 키만 교체합니다.
+4. 기존 홈서버 Compose·Caddyfile과 설치할 버전이 다르면 최초 전환을 거절합니다. 기존 운영 파일과 동일한 기준 버전으로 먼저 전환한 후 변경 버전을 수신·수동 적용합니다. 기존 `images/*.env`를 `state/images/*.env`로 복사하며 실제 실행 중인 이미지와 일치하는지 확인합니다. 이미 상태 파일이 있으면 덮어쓰지 않습니다.
+5. 아래 Tailscale OIDC 인증을 등록하고 저장소별 Secrets를 채웁니다. `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE`는 개인 비밀번호가 아닌 발급된 연결 식별값입니다.
+6. infra부터 `DEPLOY_ENABLED=true`로 설정합니다. infra의 `main`에 새 커밋을 push해 검사와 수신을 확인합니다. 각 앱 저장소도 활성화하고 **검사와 앱별 배포** workflow를 `main`에서 수동 실행해 최초 배포를 확인합니다. 이후에는 `main` push·merge가 배포를 시작합니다.
 
-```sh
-bash scripts/deploy.sh shared --demo --local-images
-bash scripts/deploy.sh production --demo --local-images
+설정 도구는 커밋되지 않은 파일을 전송하지 않습니다. 설치 중 실패하면 `DEPLOY_ENABLED=false`를 유지하고 문제를 해결한 뒤 재실행합니다. 이 도구가 만든 개인키는 임시 디렉터리에서 생성해 각 저장소 Secret에 입력하며 작업 후 로컬 임시 사본을 지웁니다. 기존 홈서버의 루트 Compose·스크립트는 자동 삭제하지 않지만 전환 후 배포는 `active-*`를 통해 수행합니다. 이전 루트 배포 스크립트를 병행 실행하지 않습니다.
+
+### GitHub 설정
+
+모든 저장소에 다음 이름을 동일하게 사용하되 SSH 개인키는 저장소별로 다릅니다. 공개 저장소에서 재사용 workflow를 호출하는 구성이므로 infra의 Actions 접근 정책도 조직 내 호출을 허용해야 합니다.
+
+| 종류 | 이름 | 값과 등록 주체 |
+| --- | --- | --- |
+| Variable | `DEPLOY_HOST` | 홈서버 Tailscale IPv4, 설정 도구가 등록 |
+| Variable | `DEPLOY_USER` | 홈서버 Linux 계정, 설정 도구가 등록 |
+| Variable | `DEPLOY_ENABLED` | 설정 도구는 `false`로 등록, 연결 확인 후 `true`로 전환 |
+| Secret | `DEPLOY_SSH_KEY` | 저장소별 전용 개인키, 설정 도구가 등록 |
+| Secret | `DEPLOY_KNOWN_HOSTS` | 기존 SSH 연결로 읽은 서버 공개 키, 설정 도구가 등록 |
+| Secret | `TS_OAUTH_CLIENT_ID` | Tailscale에서 발급한 저장소별 OIDC Client ID |
+| Secret | `TS_AUDIENCE` | 해당 OIDC 인증에 표시된 Audience |
+
+SSH 키는 `restrict`와 강제 명령을 사용합니다. 앱 키는 자기 앱의 `deploy <SHA>`와 읽기 전용 `status`만 허용합니다. infra 키는 `sync <SHA>`, `apply <환경> <SHA>`, `status`만 허용합니다. 임의 셸·포트 포워딩·다른 앱 배포에는 사용할 수 없습니다. 배포할 수 있는 이미지는 앱 코드와 마찬가지로 운영 권한을 갖는 신뢰 대상이므로 `main` merge 권한을 배포 권한으로 관리합니다.
+
+### Tailscale 최초 등록
+
+Tailscale 관리자의 Trust credentials에서 GitHub Actions용 OIDC 연동을 저장소별로 만듭니다. 긴 수명의 Tailscale 비밀키를 저장하는 대신 GitHub가 실행마다 발급하는 OIDC 토큰으로 접속합니다. 발급 권한은 `Auth Keys: Write`, 태그는 `tag:graduate-me-ci`입니다.
+
+Issuer는 `https://token.actions.githubusercontent.com`이며 Subject는 아래와 같이 `main`만 허용합니다. 관리자 화면에서 발급된 Client ID와 Audience를 각각 해당 저장소의 `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE`에 등록합니다.
+
+| 저장소 | Subject                                                            |
+| ------ | ------------------------------------------------------------------ |
+| 프론트 | `repo:please-graduate-me/graduate-me-frontend:ref:refs/heads/main` |
+| 백엔드 | `repo:please-graduate-me/graduate-me-backend:ref:refs/heads/main`  |
+| 관리자 | `repo:please-graduate-me/graduate-me-admin:ref:refs/heads/main`    |
+| infra  | `repo:please-graduate-me/graduate-me-infra:ref:refs/heads/main`    |
+
+Tailscale 접근 정책에는 아래 항목을 기존 정책에 병합합니다. 전체 정책을 이 예시로 덮어쓰지 않습니다. 이 권한은 임시 runner가 홈서버 OpenSSH의 TCP 22번 포트로 접속하게 하며, Linux 로그인은 배포 전용 SSH 키가 담당합니다. Tailscale SSH 기능을 별도로 활성화할 필요는 없습니다.
+
+```json
+{
+  "tagOwners": {
+    "tag:graduate-me-ci": ["autogroup:admin"]
+  },
+  "grants": [
+    {
+      "src": ["tag:graduate-me-ci"],
+      "dst": ["100.83.33.109"],
+      "ip": ["tcp:22"]
+    }
+  ]
+}
 ```
 
-`--local-images`는 레지스트리 다운로드만 생략합니다. DB 백업, 마이그레이션과 상태 확인은 그대로 수행합니다. 로그인과 신규 처리를 공개하기 전에는 OAuth와 환경별 CLOVA·Gemini·YouTube 키 설정을 완료해야 합니다.
+홈서버 IP가 바뀌면 이 정책과 각 저장소의 `DEPLOY_HOST`, `DEPLOY_KNOWN_HOSTS`를 함께 갱신합니다. 기존 정책에 모든 연결을 허용하는 규칙이 있으면 새 규칙만 추가해도 다른 접근이 제한되지는 않으므로 실제 허용 범위를 확인합니다.
+
+공식 안내: [Tailscale GitHub Action](https://tailscale.com/docs/integrations/github/github-action), [OIDC 연동](https://tailscale.com/docs/features/workload-identity-federation), [GitHub 재사용 workflow](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
+
+## 수동 복구와 백업
+
+백업 위치는 `GRADUATE_ME_BACKUP_DIR`로 지정하며 기본값은 비밀 설정 디렉터리의 `backups`입니다. 앱 배포와 infra 적용은 운영 DB를 초기화하거나 볼륨을 삭제하지 않습니다. 백업 보존 기간과 별도 장치 복사, 복원 검증은 별도로 운영합니다.
+
+실패한 배포의 이미지는 서버에 남을 수 있고 `state/images/*.env`는 마지막 성공 버전을 나타냅니다. `docker inspect`로 실제 컨테이너 이미지와 상태를 확인합니다. 이미지나 infra 버전을 되돌려도 이미 적용한 DB 마이그레이션을 자동으로 되돌리지는 않습니다. 수정한 백엔드를 다시 배포하거나 백업 복원 절차를 선택합니다. 직접 전송한 이미지와 수신한 infra 버전은 자동 삭제하지 않으므로 디스크 사용량에 맞춰 보존 정책을 정합니다.
 
 ## 팀원의 로컬 프론트와 개발 API
 
@@ -122,13 +198,7 @@ bash scripts/deploy.sh production --demo --local-images
 
 ## GitHub와 배포 권한
 
-이 저장소는 비공개로 만들고 배포 담당자만 쓰기 권한을 갖도록 설정합니다. 조직의 기본 권한과 팀 권한도 확인해야 합니다. 앱 저장소의 협업 권한과 별도로 관리합니다.
-
-CI는 PR과 `main` 변경 때 GitHub 제공 runner에서 실행됩니다. CD는 `main`에서 수동 실행하는 workflow를 제공합니다. `self-hosted`, `graduate-me-deploy` 라벨의 홈서버 runner가 필요합니다. 이 runner는 이 저장소에만 연결하고 앱 PR 코드의 검사나 빌드에는 사용하지 않습니다. 배포들은 하나의 concurrency 그룹으로 순차 실행됩니다.
-
-GitHub 저장소 Variables에 `GRADUATE_ME_ENV_DIR`와 필요하면 `GRADUATE_ME_BACKUP_DIR`를 설정합니다. 값은 홈서버의 절대 경로이며 실제 비밀값은 아닙니다. workflow는 환경별 비밀 파일을 홈서버에서 읽습니다.
-
-앱 저장소의 이미지 빌드·GHCR 업로드 workflow, 개발 이미지 자동 승격, 홈서버 runner 등록은 아직 별도 작업입니다. 현재 CD는 배포 버전을 이 저장소에 기록한 후 수동 실행하는 방식입니다. GitHub 요금제에 따라 내장 승인 기능이 달라도 저장소 쓰기 권한으로 배포 담당자를 제한할 수 있습니다.
+CI와 CD는 GitHub 제공 runner에서 실행하며 홈서버 runner는 사용하지 않습니다. PR은 검사 전용이고 배포는 `main`만 허용합니다. 네 저장소 모두 merge 권한과 배포 권한의 관계를 팀에 공유합니다. 공개 저장소의 일반 Linux runner를 사용하며 유료 runner나 이미지 저장소를 요구하지 않습니다. Tailscale의 무료 적용 조건과 임시 장치 시간을 별도로 확인합니다.
 
 ## 검증
 
@@ -141,7 +211,7 @@ pnpm check:ci
 
 CI는 runner 기본 설치 버전에 의존하지 않고 Docker Compose `v5.1.0`을 설치하며, 사용 버전을 로그에 남깁니다. `compose.local.yaml`의 `develop.watch.initial_sync`를 지원하지 않는 버전에서는 `additional properties 'initial_sync' not allowed` 오류로 검사가 실패합니다. 같은 오류가 발생하면 `docker compose version`을 확인하고 CI와 동일한 버전으로 맞춥니다.
 
-참고: [Compose 운영 구성](https://docs.docker.com/compose/how-tos/production/), [Compose 환경변수 파일](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/), [Caddy 환경변수](https://caddyserver.com/docs/caddyfile/concepts), [GitHub self-hosted runner](https://docs.github.com/en/actions/reference/runners/self-hosted-runners).
+참고: [Compose 운영 구성](https://docs.docker.com/compose/how-tos/production/), [Compose 환경변수 파일](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/), [Caddy 환경변수](https://caddyserver.com/docs/caddyfile/concepts), [GitHub 재사용 workflow](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
 
 ## 로컬 시작 시 수행하는 작업
 
@@ -149,7 +219,7 @@ API는 DB 마이그레이션 후 시작하며 초기 영상, 추천 영상 레�
 
 API 서버와 worker는 같은 백엔드 저장소의 서로 다른 프로세스입니다. API는 HTTP 요청과 인증·저장을 담당하고 worker는 DB 큐의 영상 분석을 처리합니다. 영상 분석 중에도 API가 요청을 받을 수 있도록 나눕니다.
 
-관리자 웹은 로컬 통합 실행에 포함되며 `http://api:4000`으로 프록시합니다. 홈서버에서는 `images/production.env`의 관리자 이미지를 별도 `admin.pleasegraduate.me` 호스트의 루트 경로로 제공합니다.
+관리자 웹은 로컬 통합 실행에 포함되며 `http://api:4000`으로 프록시합니다. 홈서버에서는 `state/images/production.env`의 관리자 이미지를 별도 `admin.pleasegraduate.me` 호스트의 루트 경로로 제공합니다.
 
 ## worker를 중지한 MVP 운영 배포
 
@@ -159,7 +229,7 @@ Cloudflare Tunnel의 관리자 Published application route는 서비스 `HTTP`, 
 
 - `https://pleasegraduate.me/api/auth/callback/google`
 
-일반 로그인과 모든 앱을 포함하되 worker를 실행하지 않을 때는 `bash scripts/deploy.sh production --without-worker --local-images`를 사용합니다. 이 경로는 DB 백업, 마이그레이션, API·학생·관리자 서비스 기동과 상태 확인을 수행합니다. 기존 worker도 먼저 중지합니다. 외부에서 빌드한 linux/amd64 이미지를 먼저 전달해야 합니다.
+자동 배포와 infra 수동 적용은 worker를 시작하지 않습니다. 백엔드 배포와 운영 infra 적용은 기존 worker를 중지하고 DB 백업·마이그레이션을 수행합니다. 영상 worker를 시작하려면 별도의 명시적인 운영 요청이 필요합니다.
 
 MVP 비밀 설정에는 `MATERIAL_POLICY_PROFILE=mvp`, `AI_PROVIDER=anthropic`, `OCR_PROVIDER=anthropic`, `ANTHROPIC_MODEL=claude-sonnet-5-5`, `VIDEO_TRANSCRIPTION_PROVIDER=disabled`를 명시합니다. 운영 기본값은 이 설정을 대신하지 않습니다.
 
@@ -167,7 +237,7 @@ MVP 비밀 설정에는 `MATERIAL_POLICY_PROFILE=mvp`, `AI_PROVIDER=anthropic`, 
 
 운영 API의 요청 로그는 `ssh jaejoon-server 'docker logs -f --tail 100 graduate-me-production-api-1'`로 조회합니다. 각 완료 요청은 한국 시각(`+09:00`)·서버 요청 ID·HTTP 메서드·라우트 패턴·상태·소요 시간·안전한 오류 코드만 기록합니다. 원문·요청 본문·쿼리·쿠키·키·IP는 API 요청 로그에 기록하지 않습니다. 관리자 `/usage`는 AI 실행 원장과 영상 처리 이력이며 전체 HTTP 로그 화면과 구분합니다.
 
-API 이미지·설정·계약을 바꾸지 않는 학생 화면 수정은 `bash scripts/deploy.sh production --web-only --without-worker --local-images`로 배포할 수 있습니다. 이 경로는 실행 중 API가 healthy이고 구성 해시가 일치하는지 먼저 검사하고 학생 컨테이너만 갱신합니다. DB 백업·마이그레이션·API 중단은 수행하지 않으며 worker도 시작하지 않습니다. API 설정이나 스키마를 바꿀 때는 기존 일반 배포의 백업·마이그레이션 순서를 사용합니다.
+학생 웹 저장소의 자동 배포는 실행 중 API가 healthy이고 설정 해시가 일치하는지 먼저 검사하고 학생 컨테이너만 갱신합니다. DB 백업·마이그레이션·API 중단은 수행하지 않으며 worker도 시작하지 않습니다. API 설정이나 스키마를 바꾸면 백엔드 배포 또는 infra 수동 적용의 백업·마이그레이션 경로를 사용합니다.
 
 ## 운영자 인증 변경
 

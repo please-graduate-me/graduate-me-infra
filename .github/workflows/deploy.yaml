@@ -1,37 +1,30 @@
-name: 홈서버 배포
+name: 수신한 infra 설정 수동 적용
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: 배포할 환경
+        description: 새 infra 설정을 적용할 환경
         required: true
         type: choice
         options: [development, production, shared]
-      without_worker:
-        description: worker를 중지한 채 배포
+      revision:
+        description: 홈서버에 수신된 infra 전체 커밋 SHA 40자리
         required: true
-        type: boolean
-        default: true
+        type: string
 permissions:
   contents: read
 concurrency:
-  group: graduate-me-home-deployment
+  group: infra-manual-apply
   cancel-in-progress: false
 jobs:
-  deploy:
-    if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, graduate-me-deploy]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: 지정한 환경 배포
-        env:
-          WITHOUT_WORKER: ${{ inputs.without_worker }}
-          DEPLOY_TARGET: ${{ inputs.target }}
-          GRADUATE_ME_ENV_DIR: ${{ vars.GRADUATE_ME_ENV_DIR }}
-          GRADUATE_ME_BACKUP_DIR: ${{ vars.GRADUATE_ME_BACKUP_DIR }}
-        run: |
-          options=()
-          if [[ "$WITHOUT_WORKER" == true ]]; then options+=(--without-worker); fi
-          bash scripts/deploy.sh "$DEPLOY_TARGET" "${options[@]}"
+  apply:
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/infra-operation.yaml
+    with:
+      operation: apply
+      target: ${{ inputs.target }}
+      revision: ${{ inputs.revision }}
+    secrets: inherit
