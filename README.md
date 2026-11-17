@@ -202,7 +202,7 @@ Tailscale 접근 정책에는 아래 항목을 기존 정책에 병합합니다.
 
 팀원은 홈서버 SSH나 DB 접속 권한 없이 개발 API의 HTTPS 주소를 사용합니다. 서버 API 주소를 프론트의 `API_INTERNAL_URL`에 주입하는 별도 프론트 개발용 Compose 구성이 필요합니다. 현재 앱 저장소의 기본 Compose는 로컬 API 주소로 고정되어 있습니다.
 
-인증된 변경 요청과 로그인 후 이동은 학생 앱의 `AUTH_URL`과 명시한 `ADMIN_APP_URL`의 출처만 허용합니다. Compose는 `ADMIN_APP_URL`을 API의 `ADMIN_URL`과 학생 웹의 `ADMIN_APP_URL`로 각각 전달합니다. 로컬에서는 비워 두면 `localhost`와 `ADMIN_PORT`로 구성합니다. 별도 호스트를 사용하는 경우 OAuth 콜백과 쿠키 공유 범위는 실제 배포 도메인에 맞춰 확인해야 합니다. 임의 팀원 주소나 출처 전체를 허용하지 않습니다.
+인증된 변경 요청과 로그인 후 이동은 학생 앱의 `AUTH_URL`과 명시한 `ADMIN_APP_URL`의 출처만 허용합니다. Compose는 `ADMIN_APP_URL`을 API의 `ADMIN_URL`과 학생 웹의 `ADMIN_APP_URL`로 각각 전달합니다. 로컬에서는 비워 두면 `localhost`와 `ADMIN_PORT`로 구성합니다. 사용자 인증은 `AUTH_URL`과 일치하는 출처에서만 가능하며 학교 인증 쿠키는 해당 호스트에 한정합니다. 임의 팀원 주소나 출처 전체를 허용하지 않습니다.
 
 개발 API도 테스트 사용자와 개발 데이터만 사용하며 운영 개인정보를 복제하지 않습니다. 팀원별 임의 버전을 동시에 제공하는 환경이 아니므로 개발 API 버전은 공유됩니다.
 
@@ -235,9 +235,7 @@ API 서버와 worker는 같은 백엔드 저장소의 서로 다른 프로세스
 
 운영 관리자 앱은 `https://admin.pleasegraduate.me/`에서 제공합니다. `production.env`의 `ADMIN_APP_URL`에도 이 주소를 지정하고 `shared.env`의 `ADMIN_DOMAIN=admin.pleasegraduate.me`를 설정합니다. 관리자 이미지는 `docker build --platform linux/amd64 --build-arg ADMIN_BASE_PATH=/ --build-arg VITE_STUDENT_URL=https://pleasegraduate.me`로 빌드합니다. 학생 도메인의 기존 `/admin`과 `/admin/*` 주소는 관리자 호스트의 대응 경로로 리디렉션합니다.
 
-Cloudflare Tunnel의 관리자 Published application route는 서비스 `HTTP`, URL `127.0.0.1:8080`으로 연결하고 HTTP Host Header는 덮어쓰지 않습니다. Caddy가 호스트로 학생·관리자를 분기하며 각 호스트의 `/api`는 같은 운영 API에 전달합니다. 사용자 웹은 Google OAuth를 사용하고 운영 콘솔은 독립 아이디·비밀번호 세션을 사용합니다. Google OAuth에는 사용자 웹 콜백만 등록합니다. 운영 콘솔은 아래 운영자 인증 변경 절을 따릅니다.
-
-- `https://pleasegraduate.me/api/auth/callback/google`
+Cloudflare Tunnel의 관리자 Published application route는 서비스 `HTTP`, URL `127.0.0.1:8080`으로 연결하고 HTTP Host Header는 덮어쓰지 않습니다. Caddy가 호스트로 학생·관리자를 분기하며 각 호스트의 `/api`는 같은 운영 API에 전달합니다. 사용자 웹은 학교 이메일 인증 코드를 사용하고 운영 콘솔은 독립 아이디·비밀번호 세션을 사용합니다. Google OAuth 콜백 등록은 필요하지 않습니다. 운영 콘솔은 아래 운영자 인증 변경 절을 따릅니다.
 
 자동 배포와 infra 수동 적용은 worker를 시작하지 않습니다. 백엔드 배포와 운영 infra 적용은 기존 worker를 중지하고 DB 백업·마이그레이션을 수행합니다. 영상 worker를 시작하려면 별도의 명시적인 운영 요청이 필요합니다.
 
@@ -251,8 +249,16 @@ MVP 비밀 설정에는 `MATERIAL_POLICY_PROFILE=mvp`, `AI_PROVIDER=anthropic`, 
 
 ## 운영자 인증 변경
 
-운영 콘솔은 Google 로그인 대신 `ADMIN_LOGIN_ID`와 `ADMIN_PASSWORD_HASH`를 사용합니다. 기존 `ADMIN_EMAILS`는 운영 권한을 부여하지 않습니다. 사용자 웹의 Google 인증 설정은 유지합니다. 관리자 호스트의 Google 콜백 등록은 더 이상 필요하지 않습니다.
+운영 콘솔은 Google 로그인 대신 `ADMIN_LOGIN_ID`와 `ADMIN_PASSWORD_HASH`를 사용합니다. 기존 `ADMIN_EMAILS`는 운영 권한을 부여하지 않습니다. 사용자 웹은 학교 이메일 인증을 사용합니다. Google 인증 설정과 콜백 등록은 사용하지 않습니다.
 
 백엔드 저장소에서 `pnpm admin:password`로 해시를 생성하고, 통합 로컬 `.env` 또는 환경별 비밀 파일에 아이디와 해시를 설정합니다. 해시는 `$` 확장을 피하도록 작은따옴표로 감쌉니다. 실제 값은 Git에 기록하지 않습니다. 아이디·해시 변경은 기존 운영 세션을 무효화합니다.
 
 조교는 사용자 웹의 프로필 타이틀과 커뮤니티 태그 기능을 사용합니다. 관리자 콘솔의 조교 메뉴는 이 자격만 부여·회수합니다. 수업 관리도 사용자 웹에서 수행하며 기존 비공개 질문은 공개 게시글로 자동 전환하지 않습니다.
+
+## 학교 이메일 인증 메일
+
+Resend SMTP로 `noreply@pleasegraduate.me`에서 인증 메일을 보냅니다. API 환경 기본값은 `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=resend`, `AUTH_EMAIL_FROM=noreply@pleasegraduate.me`입니다. `SMTP_PASSWORD`에는 Resend API 키, `AUTH_SECRET`에는 32자 이상의 무작위 비밀값을 주입합니다. 키는 `.env` 또는 서버 비밀 설정에만 보관하며 worker와 브라우저에 전달하지 않습니다.
+
+Resend에서 `pleasegraduate.me`를 추가하고 도메인 화면의 SPF·DKIM 레코드로 DNS 인증을 완료해야 합니다. DNS 값은 Resend가 실제 도메인에 제시한 값을 그대로 사용합니다. 기존 수신용 루트 MX를 바꾸지 않고, Resend가 제시한 발송·반송용 MX가 있으면 안내한 서브도메인에 추가합니다. `noreply` 메일함 생성은 필요하지 않습니다. API 키는 가능하면 `pleasegraduate.me` 발송 권한으로 제한합니다. SMTP 비밀번호가 없으면 메일을 보내지 않으며 다른 발신 주소는 백엔드가 거부합니다. [Resend SMTP 안내](https://resend.com/docs/send-with-smtp), [도메인 인증 안내](https://resend.com/docs/dashboard/domains/introduction)를 따릅니다.
+
+배포 전 백엔드의 `1800000002300-school-email-auth` 마이그레이션을 적용해야 합니다. 이후 학생은 `@hufs.ac.kr`로 받은 6자리 인증 코드로 로그인합니다. 같은 이메일의 기존 학습 계정은 유지하며 기존 Google 쿠키는 사용할 수 없습니다. 실제 SMTP 발송 검증은 명시적으로 요청받았을 때만 수행합니다.

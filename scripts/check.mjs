@@ -13,8 +13,12 @@ const env = {
   ADMIN_PORT: '3002',
   AUTH_URL: 'https://app.example.test',
   AUTH_SECRET: 'validation_only_secret_0123456789',
-  AUTH_GOOGLE_ID: 'validation_only_id',
-  AUTH_GOOGLE_SECRET: 'validation_only_oauth_secret',
+  SMTP_HOST: 'smtp.resend.com',
+  SMTP_PORT: '465',
+  SMTP_SECURE: 'true',
+  SMTP_USER: 'resend',
+  SMTP_PASSWORD: 'validation_only_mail_password',
+  AUTH_EMAIL_FROM: 'noreply@pleasegraduate.me',
   GEMINI_API_KEY: 'validation_only_gemini_key',
   YOUTUBE_API_KEY: 'validation_only_youtube_key',
   GEMINI_MODEL: 'gemini-3.8-flash',
@@ -46,7 +50,7 @@ const env = {
   ADMIN_IMAGE: 'example/admin:validation',
 };
 
-function config(files) {
+function config(files, overrides = {}) {
   const result = spawnSync(
     'docker',
     [
@@ -56,13 +60,38 @@ function config(files) {
       '--format',
       'json',
     ],
-    { env, encoding: 'utf8' }
+    { env: { ...env, ...overrides }, encoding: 'utf8' }
   );
   assert.equal(result.status, 0, result.stderr);
-  return JSON.parse(result.stdout);
+  const parsed = JSON.parse(result.stdout);
+  if (parsed.services.api) {
+    for (const key of [
+      'SMTP_HOST',
+      'SMTP_PORT',
+      'SMTP_SECURE',
+      'SMTP_USER',
+      'SMTP_PASSWORD',
+      'AUTH_EMAIL_FROM',
+    ]) {
+      assert.equal(parsed.services.api.environment[key], env[key]);
+      assert.equal(parsed.services.worker?.environment[key], undefined);
+      assert.equal(parsed.services.web?.environment?.[key], undefined);
+    }
+    assert.equal(parsed.services.api.environment.AUTH_GOOGLE_ID, undefined);
+    assert.equal(parsed.services.api.environment.AUTH_GOOGLE_SECRET, undefined);
+  }
+  return parsed;
 }
 
 const local = config(['compose.yaml', 'compose.local.yaml']);
+// 공개 설정을 생략해도 Resend TLS와 지정 발신 주소를 기본값으로 적용한다.
+config(['compose.yaml', 'compose.local.yaml'], {
+  SMTP_HOST: '',
+  SMTP_PORT: '',
+  SMTP_SECURE: '',
+  SMTP_USER: '',
+  AUTH_EMAIL_FROM: '',
+});
 assert.deepEqual(Object.keys(local.services).sort(), [
   'admin',
   'api',
@@ -263,7 +292,7 @@ for (const file of [
   const lines = readFileSync(file, 'utf8').split('\n');
   for (const line of lines) {
     if (
-      /^(DB_PASSWORD|AUTH_SECRET|AUTH_GOOGLE_SECRET|GEMINI_API_KEY|YOUTUBE_API_KEY|CLOVA_STUDIO_API_KEY|CLOVA_OCR_INVOKE_URL|CLOVA_OCR_SECRET_KEY)=/.test(
+      /^(DB_PASSWORD|AUTH_SECRET|SMTP_PASSWORD|GEMINI_API_KEY|YOUTUBE_API_KEY|CLOVA_STUDIO_API_KEY|CLOVA_OCR_INVOKE_URL|CLOVA_OCR_SECRET_KEY)=/.test(
         line
       )
     ) {
