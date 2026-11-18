@@ -48,9 +48,9 @@ jobs:
       - name: 홈서버에서 실행할 이미지 만들기
         run: |
           case "$SERVICE" in
-            web) image="graduate-me-frontend:$REVISION"; args=(--build-arg API_INTERNAL_URL=http://production-api:4000) ;;
+            web) image="graduate-me-frontend:$REVISION"; args=(--build-arg VITE_ADMIN_APP_URL=https://admin.pleasegraduate.me) ;;
             api) image="graduate-me-backend:$REVISION"; args=() ;;
-            admin) image="graduate-me-admin:$REVISION"; args=(--build-arg ADMIN_BASE_PATH=/ --build-arg VITE_STUDENT_URL=https://pleasegraduate.me) ;;
+            admin) image="graduate-me-admin:$REVISION"; args=(--build-arg ADMIN_BASE_PATH=/ --build-arg VITE_STUDENT_URL=https://app.pleasegraduate.me) ;;
           esac
           # 이미지는 GitHub에서 빌드하며 홈서버에서는 소스를 빌드하지 않는다.
           docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$REVISION" --tag "$image" "${args[@]}" .

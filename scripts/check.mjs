@@ -10,6 +10,7 @@ const env = {
   OCR_PROVIDER: '',
   VIDEO_TRANSCRIPTION_PROVIDER: '',
   DB_PASSWORD: 'validation_only_password',
+  ADMIN_APP_URL: '',
   ADMIN_PORT: '3002',
   AUTH_URL: 'https://app.example.test',
   AUTH_SECRET: 'validation_only_secret_0123456789',
@@ -83,6 +84,17 @@ function config(files, overrides = {}) {
   return parsed;
 }
 
+const runtime = config(['compose.yaml']);
+assert.equal(
+  runtime.services.web.build.args.VITE_ADMIN_APP_URL,
+  `http://localhost:${env.ADMIN_PORT}`
+);
+assert.equal(runtime.services.web.build.args.API_INTERNAL_URL, undefined);
+assert.equal(runtime.services.web.environment.ADMIN_APP_URL, undefined);
+assert.equal(runtime.services.web.environment.VITE_ADMIN_APP_URL, undefined);
+assert.equal(runtime.services.admin.build.args.VITE_STUDENT_URL, env.AUTH_URL);
+assert.equal(runtime.services.admin.build.args.ADMIN_BASE_PATH, '/');
+
 const local = config(['compose.yaml', 'compose.local.yaml']);
 // 공개 설정을 생략해도 Resend TLS와 지정 발신 주소를 기본값으로 적용한다.
 config(['compose.yaml', 'compose.local.yaml'], {
@@ -121,9 +133,27 @@ assert.equal(
   `http://localhost:${env.ADMIN_PORT || '3001'}`
 );
 assert.equal(
-  local.services.web.environment.ADMIN_APP_URL,
+  local.services.web.environment.VITE_ADMIN_APP_URL,
   local.services.api.environment.ADMIN_URL
 );
+assert.equal(local.services.admin.environment.VITE_STUDENT_URL, env.AUTH_URL);
+assert.deepEqual(local.services.web.healthcheck.test.slice(0, 3), [
+  'CMD',
+  'node',
+  '-e',
+]);
+const customOrigin = config(['compose.yaml', 'compose.local.yaml'], {
+  ADMIN_APP_URL: 'https://admin.example.test',
+});
+assert.equal(
+  customOrigin.services.web.environment.VITE_ADMIN_APP_URL,
+  'https://admin.example.test'
+);
+assert.equal(
+  customOrigin.services.api.environment.ADMIN_URL,
+  'https://admin.example.test'
+);
+
 assert.equal(local.services.admin.build.dockerfile, 'Dockerfile.dev');
 assert.ok(
   local.services.admin.develop.watch.some(
@@ -227,6 +257,45 @@ for (const [index, app] of [local, ...deployments].entries()) {
   );
   assert.equal(app.services.worker.environment.OCR_PROVIDER, undefined);
 }
+// 운영 Nginx에는 Node.js가 없으므로 정적 제공 상태는 wget으로 확인한다.
+for (const web of [runtime.services.web, deployments[1].services.web]) {
+  assert.deepEqual(web.healthcheck.test, [
+    'CMD',
+    'wget',
+    '-q',
+    '-O',
+    '/dev/null',
+    'http://127.0.0.1:3000/healthz',
+  ]);
+  assert.equal(
+    web.environment.API_INTERNAL_URL,
+    web === runtime.services.web
+      ? 'http://api:4000'
+      : 'http://production-api:4000'
+  );
+  assert.equal(web.environment.ADMIN_APP_URL, undefined);
+}
+assert.match(
+  readFileSync('env/shared.env.example', 'utf8'),
+  /^PRODUCTION_DOMAIN=app\.pleasegraduate\.me$/m
+);
+assert.match(
+  readFileSync('env/production.env.example', 'utf8'),
+  /^AUTH_URL=https:\/\/app\.pleasegraduate\.me$/m
+);
+const appWorkflow = readFileSync('.github/workflows/deploy-app.yaml', 'utf8');
+assert.ok(
+  appWorkflow.includes(
+    '--build-arg VITE_ADMIN_APP_URL=https://admin.pleasegraduate.me'
+  )
+);
+assert.ok(
+  appWorkflow.includes(
+    '--build-arg VITE_STUDENT_URL=https://app.pleasegraduate.me'
+  )
+);
+assert.equal(appWorkflow.includes('--build-arg API_INTERNAL_URL='), false);
+
 const shared = config(['compose.shared.yaml']);
 assert.equal(shared.services.gateway.ports.length, 1);
 assert.equal(shared.services.gateway.ports[0].host_ip, '127.0.0.1');

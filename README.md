@@ -75,13 +75,13 @@ Naver로 전환할 때는 `CLOVA_STUDIO_API_KEY`, `CLOVA_TEXT_MODEL=HCX-007`, `C
 
 `AI_DAILY_REQUEST_LIMIT`, `AI_DAILY_TOKEN_LIMIT`, `AI_CONCURRENT_REQUEST_LIMIT`는 계정별 UTC 한도이며 `AI_PREPARATION_PAGE_LIMIT`는 PDF 최초 준비 페이지 수입니다. `AI_DAILY_BUDGET_USD=0`은 추정 비용 제한을 끕니다. 비용 제한을 켜려면 선택한 공급자의 `AI_ANTHROPIC_*_USD_PER_MILLION`, `AI_NAVER_*_USD_PER_MILLION`, `AI_GEMINI_*_USD_PER_MILLION` 입력·출력 단가를 설정합니다. 단가 미설정 비용과 실청구 비용은 미집계로 표시합니다. 검증에는 모의 응답을 사용합니다.
 
-초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 1GiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
+초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 256MiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
 
 ## 앱별 자동 배포
 
 각 앱의 `main`에 push하거나 merge하면 해당 저장소의 GitHub Actions가 포맷·린트·타입·테스트·빌드를 검사합니다. 백엔드 CI는 `_test`로 끝나는 별도 PostgreSQL DB에 마이그레이션을 적용하고 DB 통합 테스트도 실행합니다. PR에서는 검사만 수행하며 홈서버와 연결하지 않습니다.
 
-검사가 통과한 `main`은 이 저장소의 재사용 workflow `deploy-app.yaml`을 호출합니다. 앱 소스와 Dockerfile은 해당 앱 저장소에서 받고, GitHub의 일반 Ubuntu runner에서 `linux/amd64` 이미지를 빌드합니다. 전체 앱 커밋 SHA를 이미지 태그와 revision label에 기록합니다. 학생 웹은 Next.js 빌드에 반영되는 프록시 주소도 `http://production-api:4000`으로 지정합니다.
+검사가 통과한 `main`은 이 저장소의 재사용 workflow `deploy-app.yaml`을 호출합니다. 앱 소스와 Dockerfile은 해당 앱 저장소에서 받고, GitHub의 일반 Ubuntu runner에서 `linux/amd64` 이미지를 빌드합니다. 전체 앱 커밋 SHA를 이미지 태그와 revision label에 기록합니다. 학생 웹은 React + Vite 정적 파일을 빌드하며 `VITE_ADMIN_APP_URL=https://admin.pleasegraduate.me`를 빌드 시 주입합니다. API 내부 주소는 빌드 인자가 아니라 실행 시 Nginx의 `API_INTERNAL_URL=http://production-api:4000`으로 전달합니다. 관리자 웹은 `VITE_STUDENT_URL=https://app.pleasegraduate.me`를 빌드 시 주입합니다.
 
 이미지를 압축한 뒤에 Tailscale에 임시로 연결하고, SSH로 홈서버에 전달합니다. 이미지 저장소와 홈서버 self-hosted runner는 사용하지 않습니다. 전송받은 이미지의 압축·플랫폼·revision label을 확인하고 운영에 적용한 Compose로 해당 앱만 교체합니다. 마지막 상태 확인까지 성공해야 홈서버의 이미지 버전 기록을 갱신합니다. 작업 후 Tailscale에서 즉시 로그아웃하며 GitHub 임시 묶음과 키 파일을 지웁니다.
 
@@ -202,7 +202,7 @@ Tailscale 접근 정책에는 아래 항목을 기존 정책에 병합합니다.
 
 팀원은 홈서버 SSH나 DB 접속 권한 없이 개발 API의 HTTPS 주소를 사용합니다. 서버 API 주소를 프론트의 `API_INTERNAL_URL`에 주입하는 별도 프론트 개발용 Compose 구성이 필요합니다. 현재 앱 저장소의 기본 Compose는 로컬 API 주소로 고정되어 있습니다.
 
-인증된 변경 요청과 로그인 후 이동은 학생 앱의 `AUTH_URL`과 명시한 `ADMIN_APP_URL`의 출처만 허용합니다. Compose는 `ADMIN_APP_URL`을 API의 `ADMIN_URL`과 학생 웹의 `ADMIN_APP_URL`로 각각 전달합니다. 로컬에서는 비워 두면 `localhost`와 `ADMIN_PORT`로 구성합니다. 사용자 인증은 `AUTH_URL`과 일치하는 출처에서만 가능하며 학교 인증 쿠키는 해당 호스트에 한정합니다. 임의 팀원 주소나 출처 전체를 허용하지 않습니다.
+인증된 변경 요청과 로그인 후 이동은 학생 앱의 `AUTH_URL`과 명시한 `ADMIN_APP_URL`의 출처만 허용합니다. Compose는 `ADMIN_APP_URL`을 API의 `ADMIN_URL`과 학생 개발 서버의 `VITE_ADMIN_APP_URL`로 전달합니다. 정적 학생 웹은 Docker 빌드 인자 `VITE_ADMIN_APP_URL`, 관리자 웹은 빌드 인자 `VITE_STUDENT_URL`을 사용하므로 운영 컨테이너의 환경변수만 바꿔서는 링크가 갱신되지 않습니다. 로컬에서는 비워 두면 `localhost`와 `ADMIN_PORT`로 구성합니다. 사용자 인증은 `AUTH_URL`과 일치하는 출처에서만 가능하며 학교 인증 쿠키는 해당 호스트에 한정합니다. 임의 팀원 주소나 출처 전체를 허용하지 않습니다.
 
 개발 API도 테스트 사용자와 개발 데이터만 사용하며 운영 개인정보를 복제하지 않습니다. 팀원별 임의 버전을 동시에 제공하는 환경이 아니므로 개발 API 버전은 공유됩니다.
 
@@ -233,7 +233,7 @@ API 서버와 worker는 같은 백엔드 저장소의 서로 다른 프로세스
 
 ## worker를 중지한 MVP 운영 배포
 
-운영 관리자 앱은 `https://admin.pleasegraduate.me/`에서 제공합니다. `production.env`의 `ADMIN_APP_URL`에도 이 주소를 지정하고 `shared.env`의 `ADMIN_DOMAIN=admin.pleasegraduate.me`를 설정합니다. 관리자 이미지는 `docker build --platform linux/amd64 --build-arg ADMIN_BASE_PATH=/ --build-arg VITE_STUDENT_URL=https://pleasegraduate.me`로 빌드합니다. 학생 도메인의 기존 `/admin`과 `/admin/*` 주소는 관리자 호스트의 대응 경로로 리디렉션합니다.
+운영 관리자 앱은 `https://admin.pleasegraduate.me/`에서 제공합니다. `production.env`의 `ADMIN_APP_URL`에도 이 주소를 지정하고 `shared.env`의 `ADMIN_DOMAIN=admin.pleasegraduate.me`를 설정합니다. 관리자 이미지는 `docker build --platform linux/amd64 --build-arg ADMIN_BASE_PATH=/ --build-arg VITE_STUDENT_URL=https://app.pleasegraduate.me`로 빌드합니다. 학생 도메인의 기존 `/admin`과 `/admin/*` 주소는 관리자 호스트의 대응 경로로 리디렉션합니다.
 
 Cloudflare Tunnel의 관리자 Published application route는 서비스 `HTTP`, URL `127.0.0.1:8080`으로 연결하고 HTTP Host Header는 덮어쓰지 않습니다. Caddy가 호스트로 학생·관리자를 분기하며 각 호스트의 `/api`는 같은 운영 API에 전달합니다. 사용자 웹은 학교 이메일 인증 코드를 사용하고 운영 콘솔은 독립 아이디·비밀번호 세션을 사용합니다. Google OAuth 콜백 등록은 필요하지 않습니다. 운영 콘솔은 아래 운영자 인증 변경 절을 따릅니다.
 
@@ -262,3 +262,13 @@ Resend SMTP로 `noreply@pleasegraduate.me`에서 인증 메일을 보냅니다. 
 Resend에서 `pleasegraduate.me`를 추가하고 도메인 화면의 SPF·DKIM 레코드로 DNS 인증을 완료해야 합니다. DNS 값은 Resend가 실제 도메인에 제시한 값을 그대로 사용합니다. 기존 수신용 루트 MX를 바꾸지 않고, Resend가 제시한 발송·반송용 MX가 있으면 안내한 서브도메인에 추가합니다. `noreply` 메일함 생성은 필요하지 않습니다. API 키는 가능하면 `pleasegraduate.me` 발송 권한으로 제한합니다. SMTP 비밀번호가 없으면 메일을 보내지 않으며 다른 발신 주소는 백엔드가 거부합니다. [Resend SMTP 안내](https://resend.com/docs/send-with-smtp), [도메인 인증 안내](https://resend.com/docs/dashboard/domains/introduction)를 따릅니다.
 
 배포 전 백엔드의 `1800000002300-school-email-auth` 마이그레이션을 적용해야 합니다. 이후 학생은 `@hufs.ac.kr`로 받은 6자리 인증 코드로 로그인합니다. 같은 이메일의 기존 학습 계정은 유지하며 기존 Google 쿠키는 사용할 수 없습니다. 실제 SMTP 발송 검증은 명시적으로 요청받았을 때만 수행합니다.
+
+## 랜딩과 서비스 도메인 분리
+
+랜딩은 `pleasegraduate.me`의 Cloudflare Pages, 학생 앱은 `app.pleasegraduate.me`의 홈서버 Tunnel, 관리자는 `admin.pleasegraduate.me`를 사용합니다. 랜딩 저장소 `../graduate-me-landing`은 홈서버 Compose에 포함하지 않습니다. 정적 산출물은 `out/`이며 공개 서비스 URL은 빌드 시 `NEXT_PUBLIC_APP_URL=https://app.pleasegraduate.me`로 확정합니다.
+
+홈서버 `production.env`의 `AUTH_URL`과 `shared.env`의 `PRODUCTION_DOMAIN`은 함께 새 앱 주소로 바꿔야 합니다. 예시 파일만 바꿔서는 현재 운영 설정이 변경되지 않습니다. 학생과 관리자는 각 호스트의 `/api`를 이용하며, 랜딩은 API와 인증 쿠키를 사용하지 않습니다. 발신 주소와 Resend DNS는 `noreply@pleasegraduate.me` 기준을 유지합니다.
+
+웹 상태 검사는 운영 Nginx의 `/healthz`를 `wget`으로 확인하고, 로컬 Vite 개발 서버는 Node.js로 `/`를 확인합니다. API 상태는 별도의 API healthcheck가 검사합니다.
+
+실제 전환 순서와 Cloudflare 화면별 입력값, 기존 연결 복구 절차는 [도메인 전환 안내](docs/domain-cutover.md)를 따릅니다. 현재 단계는 코드·설정 준비이며, 원격 저장소 생성·push·배포·DNS·서버 비밀 파일 변경을 실행하지 않습니다.

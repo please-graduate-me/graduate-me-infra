@@ -113,18 +113,19 @@ services:
       context: '../graduate-me-frontend'
       dockerfile: Dockerfile
       args:
-        API_INTERNAL_URL: http://api:4000
+        VITE_ADMIN_APP_URL: '${ADMIN_APP_URL:-http://localhost:${ADMIN_PORT:-3001}}'
     environment:
       API_INTERNAL_URL: http://api:4000
-      ADMIN_APP_URL: '${ADMIN_APP_URL:-http://localhost:${ADMIN_PORT:-3001}}'
     ports:
       - 127.0.0.1:3000:3000
     healthcheck:
       test:
         - CMD
-        - node
-        - '-e'
-        - fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1:3000/healthz
       interval: 5s
       timeout: 3s
       retries: 30
@@ -135,6 +136,9 @@ services:
     build:
       context: '../graduate-me-admin'
       dockerfile: Dockerfile
+      args:
+        ADMIN_BASE_PATH: /
+        VITE_STUDENT_URL: '${AUTH_URL:-http://localhost:3000}'
     environment:
       API_INTERNAL_URL: http://api:4000
     ports:

@@ -141,13 +141,14 @@ services:
   web:
     environment:
       API_INTERNAL_URL: http://production-api:4000
-      ADMIN_APP_URL: '${ADMIN_APP_URL:-}'
     healthcheck:
       test:
         - CMD
-        - node
-        - '-e'
-        - fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1:3000/healthz
       interval: 5s
       timeout: 3s
       retries: 30
@@ -160,7 +161,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    mem_limit: 1g
+    mem_limit: 256m
     restart: unless-stopped
     logging:
       driver: json-file

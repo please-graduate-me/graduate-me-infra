@@ -61,6 +61,14 @@ services:
         - action: rebuild
           path: '../graduate-me-backend/Dockerfile.dev'
   web:
+    environment:
+      VITE_ADMIN_APP_URL: '${ADMIN_APP_URL:-http://localhost:${ADMIN_PORT:-3001}}'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
     build:
       context: '../graduate-me-frontend'
       dockerfile: Dockerfile.dev
@@ -91,6 +99,8 @@ services:
         - action: rebuild
           path: '../graduate-me-frontend/Dockerfile.dev'
   admin:
+    environment:
+      VITE_STUDENT_URL: '${AUTH_URL:-http://localhost:3000}'
     build:
       context: '../graduate-me-admin'
       dockerfile: Dockerfile.dev
