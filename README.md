@@ -75,7 +75,7 @@ Naver로 전환할 때는 `CLOVA_STUDIO_API_KEY`, `CLOVA_TEXT_MODEL=HCX-007`, `C
 
 `AI_DAILY_REQUEST_LIMIT`, `AI_DAILY_TOKEN_LIMIT`, `AI_CONCURRENT_REQUEST_LIMIT`는 계정별 UTC 한도이며 `AI_PREPARATION_PAGE_LIMIT`는 PDF 최초 준비 페이지 수입니다. `AI_DAILY_BUDGET_USD=0`은 추정 비용 제한을 끕니다. 비용 제한을 켜려면 선택한 공급자의 `AI_ANTHROPIC_*_USD_PER_MILLION`, `AI_NAVER_*_USD_PER_MILLION`, `AI_GEMINI_*_USD_PER_MILLION` 입력·출력 단가를 설정합니다. 단가 미설정 비용과 실청구 비용은 미집계로 표시합니다. 검증에는 모의 응답을 사용합니다.
 
-초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 256MiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
+초기 메모리 제한은 환경별 DB 1GiB, API·worker 각각 768MiB, 운영 프론트 1GiB, Caddy 256MiB입니다. 실제 동시 요청으로 측정해 조정해야 하며 Docker VM과 호스트 OS의 여유도 필요합니다.
 
 ## 앱별 자동 배포
 
@@ -269,6 +269,6 @@ Resend에서 `pleasegraduate.me`를 추가하고 도메인 화면의 SPF·DKIM �
 
 홈서버 `production.env`의 `AUTH_URL`과 `shared.env`의 `PRODUCTION_DOMAIN`은 함께 새 앱 주소로 바꿔야 합니다. 예시 파일만 바꿔서는 현재 운영 설정이 변경되지 않습니다. 학생과 관리자는 각 호스트의 `/api`를 이용하며, 랜딩은 API와 인증 쿠키를 사용하지 않습니다. 발신 주소와 Resend DNS는 `noreply@pleasegraduate.me` 기준을 유지합니다.
 
-웹 상태 검사는 운영 Nginx의 `/healthz`를 `wget`으로 확인하고, 로컬 Vite 개발 서버는 Node.js로 `/`를 확인합니다. API 상태는 별도의 API healthcheck가 검사합니다.
+웹 상태 검사는 운영 Nginx의 `/healthz`를 `wget`으로 확인하고, 최초 전환 중 기존 Node.js 이미지가 남아 있으면 `/api/health`를 Node.js로 검사합니다. 로컬 Vite 개발 서버는 Node.js로 `/`를 확인합니다. API 상태는 별도의 API healthcheck가 검사합니다.
 
 실제 전환 순서와 Cloudflare 화면별 입력값, 기존 연결 복구 절차는 [도메인 전환 안내](docs/domain-cutover.md)를 따릅니다. 현재 단계는 코드·설정 준비이며, 원격 저장소 생성·push·배포·DNS·서버 비밀 파일 변경을 실행하지 않습니다.

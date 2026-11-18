@@ -18,7 +18,7 @@
 ## 코드와 이미지 준비
 
 - 자동 배포가 켜져 있다면 앱 코드를 `main`에 push할 때 배포가 시작될 수 있다. 한 번에 전환할 준비가 되기 전에는 push·workflow 실행을 하지 않는다. 필요하면 배포 작업에서 `DEPLOY_ENABLED`를 조정한다.
-- frontend·backend·admin 이미지와 새 infra를 함께 준비한다. 기존 Next.js 이미지와 새 Nginx 상태 검사를 섞어서 배포하지 않는다. 기존 infra의 Node.js 상태 검사로 새 Nginx 이미지만 단독 배포하는 것도 실패한다.
+- frontend·backend·admin 이미지와 새 infra를 함께 준비한다. 운영 상태 검사는 기존 Node.js 이미지와 새 Nginx 이미지를 모두 지원하므로 새 infra를 현재 이미지에 먼저 적용할 수 있다. 반대로 기존 infra의 Node.js 전용 상태 검사로 새 Nginx 이미지만 단독 배포하면 실패한다.
 - 이미지는 기존 배포 방식대로 GitHub의 Linux runner 등 홈서버 외부에서 `linux/amd64`로 빌드한다. 커밋 SHA를 태그와 revision label에 기록한다. 홈서버에서는 빌드하지 않는다.
 - frontend 빌드 인자: `VITE_ADMIN_APP_URL=https://admin.pleasegraduate.me`.
 - admin 빌드 인자: `ADMIN_BASE_PATH=/`, `VITE_STUDENT_URL=https://app.pleasegraduate.me`.
@@ -37,9 +37,16 @@
 | `~/.config/graduate-me/shared.env` | `ADMIN_DOMAIN` | 기존 유지 |
 | `~/.config/graduate-me/shared.env` | `DEVELOPMENT_API_DOMAIN` | 기존 유지 |
 
-새 이미지와 infra는 같은 전환 작업에서 적용한다. 기존 운영 이미지 버전 기록을 백업하고, 새 이미지가 모두 홈서버에 적재·플랫폼·revision 검증된 상태에서 검증한 후보 이미지 목록으로 `scripts/deploy.sh production --without-worker --local-images`를 실행한다. 준비된 후보 목록은 `GRADUATE_ME_IMAGE_FILE`로 전달할 수 있다. 모든 상태 검사가 통과한 뒤 성공 이미지 기록과 활성 infra를 갱신한다. 기존 앱별 자동 배포만 순서대로 실행하면 이미지와 상태 검사 버전이 엇갈릴 수 있으므로 최초 전환은 조율해서 진행한다.
+자동 배포를 사용하는 최초 전환은 다음 순서를 따른다.
 
-기존 배포 스크립트가 DB 백업과 `1800000002300-school-email-auth`를 포함한 마이그레이션을 적용한다. 이후 `shared` 구성도 적용하여 Caddy가 새 앱 호스트를 처리하게 한다. Caddy가 새 호스트만 처리하도록 바뀌면 이전 루트의 서비스 응답은 중단될 수 있으므로 Pages의 임시 주소 검증까지 끝낸 뒤 같은 전환 시간에 진행한다. worker는 시작하지 않는다. 메일 실제 발송과 Gemini 호출은 별도 승인 없이 검증에 포함하지 않는다.
+1. infra를 먼저 push하고 구성 검사와 서버 수신이 성공했는지 확인한다. 이 단계는 운영 컨테이너를 바꾸지 않는다.
+2. 서버 환경변수는 기존 주소로 유지한 채, 수신한 새 infra를 `production`에 수동 적용한다. 기존 이미지의 상태 검사를 지원하므로 앱 이미지와 배포 설정의 전환 순서가 막히지 않는다. worker는 시작하지 않는다.
+3. backend를 push하고 DB 마이그레이션과 API 교체가 성공한 뒤 frontend와 admin을 push한다. 앱 workflow가 GitHub에서 새 이미지를 빌드하고 이미 적용한 infra로 배포한다.
+4. 새 앱 이미지의 상태 검사가 모두 통과하면 아래 도메인 전환 단계에서 환경변수와 Caddy 주소를 함께 변경한다. 운영 이미지 기록은 각 배포가 성공한 뒤 기존 스크립트가 갱신한다.
+
+자동 배포와 별도로 이미지를 준비하는 경우에는 홈서버 외부에서 빌드·revision 검증한 후보 이미지 목록을 `GRADUATE_ME_IMAGE_FILE`로 전달하여 `scripts/deploy.sh production --without-worker --local-images`로 함께 적용할 수 있다.
+
+새 backend 이미지의 배포 스크립트가 DB 백업과 `1800000002300-school-email-auth`를 포함한 마이그레이션을 적용한다. 이후 `shared` 구성도 적용하여 Caddy가 새 앱 호스트를 처리하게 한다. Caddy가 새 호스트만 처리하도록 바뀌면 이전 루트의 서비스 응답은 중단될 수 있으므로 Pages의 임시 주소 검증까지 끝낸 뒤 같은 전환 시간에 진행한다. worker는 시작하지 않는다. 메일 실제 발송과 Gemini 호출은 별도 승인 없이 검증에 포함하지 않는다.
 
 도메인 변경으로 기존 호스트 전용 세션은 새 앱에서 사용할 수 없으므로 사용자는 학교 이메일로 다시 로그인한다. 루트 도메인과 쿠키를 공유하도록 `Domain=.pleasegraduate.me`를 추가하지 않는다.
 

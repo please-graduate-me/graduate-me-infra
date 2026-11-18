@@ -257,22 +257,31 @@ for (const [index, app] of [local, ...deployments].entries()) {
   );
   assert.equal(app.services.worker.environment.OCR_PROVIDER, undefined);
 }
-// 운영 Nginx에는 Node.js가 없으므로 정적 제공 상태는 wget으로 확인한다.
-for (const web of [runtime.services.web, deployments[1].services.web]) {
-  assert.deepEqual(web.healthcheck.test, [
-    'CMD',
-    'wget',
-    '-q',
-    '-O',
-    '/dev/null',
-    'http://127.0.0.1:3000/healthz',
-  ]);
-  assert.equal(
-    web.environment.API_INTERNAL_URL,
-    web === runtime.services.web
-      ? 'http://api:4000'
-      : 'http://production-api:4000'
-  );
+// 로컬 운영 이미지와 최초 전환용 운영 상태 검사를 각각 확인한다.
+assert.deepEqual(runtime.services.web.healthcheck.test, [
+  'CMD',
+  'wget',
+  '-q',
+  '-O',
+  '/dev/null',
+  'http://127.0.0.1:3000/healthz',
+]);
+const productionHealthcheck = deployments[1].services.web.healthcheck.test;
+assert.equal(productionHealthcheck[0], 'CMD-SHELL');
+assert.ok(productionHealthcheck[1].includes('command -v node'));
+assert.ok(
+  productionHealthcheck[1].includes('http://127.0.0.1:3000/api/health')
+);
+assert.ok(
+  productionHealthcheck[1].includes(
+    'wget -q -O /dev/null http://127.0.0.1:3000/healthz'
+  )
+);
+for (const [web, backendUrl] of [
+  [runtime.services.web, 'http://api:4000'],
+  [deployments[1].services.web, 'http://production-api:4000'],
+]) {
+  assert.equal(web.environment.API_INTERNAL_URL, backendUrl);
   assert.equal(web.environment.ADMIN_APP_URL, undefined);
 }
 assert.match(

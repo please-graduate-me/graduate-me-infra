@@ -143,12 +143,14 @@ services:
       API_INTERNAL_URL: http://production-api:4000
     healthcheck:
       test:
-        - CMD
-        - wget
-        - -q
-        - -O
-        - /dev/null
-        - http://127.0.0.1:3000/healthz
+        # 최초 전환은 기존 Next.js 이미지로 infra를 먼저 적용하므로 두 실행 환경을 지원한다.
+        - CMD-SHELL
+        - >-
+          if command -v node >/dev/null 2>&1; then
+            node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))";
+          else
+            wget -q -O /dev/null http://127.0.0.1:3000/healthz;
+          fi
       interval: 5s
       timeout: 3s
       retries: 30
@@ -161,7 +163,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    mem_limit: 256m
+    mem_limit: 1g
     restart: unless-stopped
     logging:
       driver: json-file
